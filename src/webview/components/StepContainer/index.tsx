@@ -43,6 +43,7 @@ export const StepContainer: React.FC<StepContainerProps> = ({
     onDelete,
     onContinue
 }) => {
+    console.log(`[StepContainer] Rendering message ${index}:`, { role, content: content?.substring(0, 50), contentLength: content?.length });
     const [isTruncated, setIsTruncated] = useState(false);
 
     // Check if message appears truncated

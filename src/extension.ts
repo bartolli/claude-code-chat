@@ -82,6 +82,7 @@ export function deactivate() {
 class ClaudeChatProvider {
     private _panel: vscode.WebviewPanel | undefined;
     private _disposables: vscode.Disposable[] = [];
+    private _messageHandler: any | undefined;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -89,6 +90,17 @@ class ClaudeChatProvider {
         private readonly _services?: any
     ) {
         console.log('STEP3: ClaudeChatProvider created, services available:', !!_services);
+        
+        // Create ExtensionMessageHandler once during construction
+        if (this._services) {
+            try {
+                const { ExtensionMessageHandler } = require('./services/ExtensionMessageHandler');
+                this._messageHandler = new ExtensionMessageHandler(this._context, this._services);
+                console.log('STEP3: ExtensionMessageHandler created during construction');
+            } catch (error) {
+                console.error('STEP3: Failed to create ExtensionMessageHandler:', error);
+            }
+        }
     }
 
     public show() {
@@ -204,19 +216,29 @@ class ClaudeChatProvider {
 
         // Import required modules
         const { SimpleWebviewProtocol } = require('./protocol/SimpleWebviewProtocol');
-        const { ExtensionMessageHandler } = require('./services/ExtensionMessageHandler');
         
         // Create SimpleWebviewProtocol
         const webviewProtocol = new SimpleWebviewProtocol(this._panel.webview);
         
-        // Create and attach message handler
-        const messageHandler = new ExtensionMessageHandler(this._context, this._services);
-        messageHandler.attach(webviewProtocol);
+        // Use existing message handler or create one if needed
+        if (!this._messageHandler && this._services) {
+            const { ExtensionMessageHandler } = require('./services/ExtensionMessageHandler');
+            this._messageHandler = new ExtensionMessageHandler(this._context, this._services);
+            console.log('STEP3: Created ExtensionMessageHandler in setupMessageHandling');
+        }
         
-        // Set up protocol handler
-        webviewProtocol.setHandler(async (type: any, data: any) => {
-            return await messageHandler.handleMessage(type, data);
-        });
+        if (this._messageHandler) {
+            // Attach the webview protocol to the existing handler
+            this._messageHandler.attach(webviewProtocol);
+            console.log('STEP3: Attached webviewProtocol to existing ExtensionMessageHandler');
+            
+            // Set up protocol handler
+            webviewProtocol.setHandler(async (type: any, data: any) => {
+                return await this._messageHandler.handleMessage(type, data);
+            });
+        } else {
+            console.error('STEP3: No ExtensionMessageHandler available!');
+        }
         
         console.log('STEP3: Message handling set up');
         

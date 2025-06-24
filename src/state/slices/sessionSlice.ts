@@ -136,8 +136,11 @@ const sessionSlice = createSlice({
     
     // Streaming message handling
     messageAdded: (state, action: PayloadAction<{ role: 'user' | 'assistant'; content: string }>) => {
+      console.log('[sessionSlice] messageAdded called with:', action.payload);
+      
       // Don't add empty messages
       if (!action.payload.content && action.payload.role === 'assistant') {
+        console.log('[sessionSlice] Skipping empty assistant message');
         return;
       }
       
@@ -163,17 +166,33 @@ const sessionSlice = createSlice({
       
       const session = state.sessions[state.currentSessionId];
       if (session) {
+        // Check for duplicate user messages (within last 2 seconds)
+        if (action.payload.role === 'user') {
+          const recentMessages = session.messages.filter(
+            msg => msg.role === 'user' && 
+            msg.content === action.payload.content &&
+            msg.timestamp && (Date.now() - msg.timestamp < 2000)
+          );
+          
+          if (recentMessages.length > 0) {
+            console.warn('[sessionSlice] Ignoring duplicate user message:', action.payload.content);
+            return; // Skip duplicate
+          }
+        }
+        
         const message: ClaudeMessage = {
           role: action.payload.role,
           content: action.payload.content,
           timestamp: Date.now()
         };
         
+        console.log('[sessionSlice] Adding message to session:', message);
         session.messages.push(message);
         session.updatedAt = Date.now();
         
         if (state.activeSession?.id === state.currentSessionId) {
           state.activeSession.messages = [...session.messages];
+          console.log('[sessionSlice] Updated activeSession messages count:', state.activeSession.messages.length);
         }
       }
     },

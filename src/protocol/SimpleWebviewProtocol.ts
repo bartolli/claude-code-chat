@@ -43,10 +43,33 @@ export class SimpleWebviewProtocol {
      * Send a message to the webview
      */
     public post(type: string, data: any): void {
-        console.log(`SimpleWebviewProtocol: Sending message to webview - type: ${type}, data:`, data);
-        this.webview.postMessage({
-            messageType: type,
-            data
-        });
+        const timestamp = new Date().toISOString();
+        const messageId = Math.random().toString(36).substring(7);
+        
+        console.log(`[${timestamp}] SimpleWebviewProtocol: Preparing to send message`);
+        console.log(`  - Type: ${type}`);
+        console.log(`  - Message ID: ${messageId}`);
+        console.log(`  - Data:`, JSON.stringify(data, null, 2));
+        
+        try {
+            const message = {
+                messageType: type,
+                data,
+                timestamp,
+                messageId
+            };
+            
+            console.log(`[${timestamp}] SimpleWebviewProtocol: Calling webview.postMessage`);
+            const result = this.webview.postMessage(message);
+            console.log(`[${timestamp}] SimpleWebviewProtocol: postMessage returned:`, result);
+            
+            // Log specific message types that are problematic
+            if (type === 'message/add' || type === 'message/update') {
+                console.log(`[${timestamp}] SimpleWebviewProtocol: CRITICAL - Sent ${type} message with ID ${messageId}`);
+            }
+        } catch (error) {
+            console.error(`[${timestamp}] SimpleWebviewProtocol: ERROR sending message:`, error);
+            console.error(`  - Error details:`, error);
+        }
     }
 }

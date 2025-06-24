@@ -132,6 +132,14 @@ export const StyledMarkdownPreview: React.FC<StyledMarkdownPreviewProps> = memo(
 }) => {
     // Clean up the source text
     const processedSource = source.trim();
+    
+    console.log('[StyledMarkdownPreview] Rendering with source:', {
+        sourceLength: source?.length,
+        processedSourceLength: processedSource?.length,
+        first50Chars: processedSource?.substring(0, 50),
+        isRenderingInStepContainer,
+        itemIndex
+    });
 
     // Configure remark with math support
     const [reactContent] = useRemark({
@@ -151,6 +159,13 @@ export const StyledMarkdownPreview: React.FC<StyledMarkdownPreviewProps> = memo(
             },
         },
     }, processedSource);
+    
+    console.log('[StyledMarkdownPreview] useRemark output:', {
+        hasContent: !!reactContent,
+        contentType: typeof reactContent,
+        isArray: Array.isArray(reactContent),
+        contentLength: Array.isArray(reactContent) ? reactContent.length : 'not array'
+    });
 
     return (
         <StyledMarkdown
@@ -158,7 +173,11 @@ export const StyledMarkdownPreview: React.FC<StyledMarkdownPreviewProps> = memo(
             bgColor={vscBackground}
             className="wmde-markdown"
         >
-            {reactContent}
+            {reactContent || (
+                <div style={{ whiteSpace: 'pre-wrap' }}>
+                    {processedSource || '[No content]'}
+                </div>
+            )}
         </StyledMarkdown>
     );
 });

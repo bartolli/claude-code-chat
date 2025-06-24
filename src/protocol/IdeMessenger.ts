@@ -85,7 +85,26 @@ export class IdeMessenger implements IIdeMessenger {
         // Set up message receiving
         if (typeof window !== 'undefined') {
             window.addEventListener('message', (event: MessageEvent) => {
+                const timestamp = new Date().toISOString();
+                console.log(`[${timestamp}] IdeMessenger: Window message event received`);
+                console.log(`  - Origin: ${event.origin}`);
+                console.log(`  - Source: ${event.source}`);
+                console.log(`  - Data:`, event.data);
+                
                 const message = event.data as Message;
+                
+                // Validate message structure
+                if (!message || typeof message !== 'object') {
+                    console.warn(`[${timestamp}] IdeMessenger: Invalid message format - not an object`);
+                    return;
+                }
+                
+                if (!message.messageType) {
+                    console.warn(`[${timestamp}] IdeMessenger: Message missing messageType field`);
+                    console.warn(`  - Full event data:`, event.data);
+                    return;
+                }
+                
                 this.handleMessage(message);
             });
         }
@@ -270,15 +289,30 @@ export class IdeMessenger implements IIdeMessenger {
 
     private handleMessage(message: Message): void {
         const { messageId, messageType, data } = message;
+        const timestamp = new Date().toISOString();
+        
+        // Enhanced logging for debugging
+        console.log(`[${timestamp}] IdeMessenger: Received message from backend`);
+        console.log(`  - Type: ${messageType}`);
+        console.log(`  - Message ID: ${messageId || 'none'}`);
+        console.log(`  - Data:`, data);
+        
+        // Log critical message types
+        if (messageType === 'message/add' || messageType === 'message/update') {
+            console.log(`[${timestamp}] IdeMessenger: CRITICAL - Received ${messageType}`);
+            console.log(`  - Full message object:`, JSON.stringify(message, null, 2));
+        }
 
         // Check for response to a request
         if (this.responseHandlers.has(messageId)) {
+            console.log(`[${timestamp}] IdeMessenger: Handling as response to request ${messageId}`);
             this.responseHandlers.get(messageId)!(data);
             return;
         }
 
         // Check for stream data
         if (this.streamBuffers.has(messageId)) {
+            console.log(`[${timestamp}] IdeMessenger: Handling as stream data for ${messageId}`);
             const bufferInfo = this.streamBuffers.get(messageId)!;
             bufferInfo.buffer.push(data);
             return;
@@ -287,18 +321,22 @@ export class IdeMessenger implements IIdeMessenger {
         // Check for regular handlers
         const handlers = this.handlers.get(messageType);
         if (handlers) {
+            console.log(`[${timestamp}] IdeMessenger: Found ${handlers.size} handlers for ${messageType}`);
             handlers.forEach(handler => {
                 try {
                     handler(data);
                 } catch (error) {
-                    console.error('Error in message handler:', error);
+                    console.error(`[${timestamp}] IdeMessenger: Error in handler for ${messageType}:`, error);
                 }
             });
+        } else {
+            console.warn(`[${timestamp}] IdeMessenger: No handlers registered for message type: ${messageType}`);
         }
 
         // Check for stream start
         const streamHandlers = this.streamHandlers.get(messageType);
         if (streamHandlers && data.messageId) {
+            console.log(`[${timestamp}] IdeMessenger: Starting stream for ${messageType}`);
             // Initialize stream for this message
             this.streamBuffers.set(data.messageId, { buffer: [] });
             
@@ -309,7 +347,7 @@ export class IdeMessenger implements IIdeMessenger {
                 try {
                     handler(generator);
                 } catch (error) {
-                    console.error('Error in stream handler:', error);
+                    console.error(`[${timestamp}] IdeMessenger: Error in stream handler:`, error);
                 }
             });
         }
