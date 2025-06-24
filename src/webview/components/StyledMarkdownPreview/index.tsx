@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect } from 'react';
 import { useRemark } from 'react-remark';
 import rehypeKatex from 'rehype-katex';
 import remarkMath from 'remark-math';
@@ -142,11 +142,11 @@ export const StyledMarkdownPreview: React.FC<StyledMarkdownPreviewProps> = memo(
     });
 
     // Configure remark with math support
-    const [reactContent] = useRemark({
+    const [reactContent, setMarkdownSource] = useRemark({
         remarkPlugins: [remarkMath],
         rehypePlugins: [
-            rehypeKatex,
-            [rehypeHighlightPlugin, { isRenderingInStepContainer }]
+            rehypeKatex as any,
+            rehypeHighlightPlugin({ isRenderingInStepContainer })
         ],
         // Custom components
         rehypeReactOptions: {
@@ -158,7 +158,12 @@ export const StyledMarkdownPreview: React.FC<StyledMarkdownPreviewProps> = memo(
                 ),
             },
         },
-    }, processedSource);
+    });
+    
+    // Set the markdown source using useEffect
+    useEffect(() => {
+        setMarkdownSource(processedSource);
+    }, [processedSource, setMarkdownSource]);
     
     console.log('[StyledMarkdownPreview] useRemark output:', {
         hasContent: !!reactContent,

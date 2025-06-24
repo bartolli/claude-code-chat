@@ -18,6 +18,7 @@ export class ExtensionMessageHandler {
     private webviewProtocol: SimpleWebviewProtocol | null = null;
     private streamProcessor: StreamProcessor;
     private jsonParser: ChunkedJSONParser;
+    private currentSessionId: string | null = null;
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -54,6 +55,8 @@ export class ExtensionMessageHandler {
             
             case 'chat/newSession':
                 this.logger.info('ExtensionMessageHandler', 'New session requested');
+                this.currentSessionId = null;
+                this.outputChannel.appendLine(`[DEBUG] Session cleared - next message will start new session`);
                 return undefined as any;
             
             case 'settings/get':
@@ -127,7 +130,17 @@ export class ExtensionMessageHandler {
             // Build Claude CLI arguments
             // Use -p flag without message (will send via stdin)
             // IMPORTANT: --verbose is required when using --output-format stream-json with -p
-            const args = ['-p', '--output-format', 'stream-json', '--verbose'];
+            const args = ['-p'];
+            
+            // If we have an existing session, use --resume
+            if (this.currentSessionId) {
+                args.push('--resume', this.currentSessionId);
+                this.outputChannel.appendLine(`[DEBUG] Resuming session: ${this.currentSessionId}`);
+            } else {
+                this.outputChannel.appendLine(`[DEBUG] Starting new session`);
+            }
+            
+            args.push('--output-format', 'stream-json', '--verbose');
             
             // Note: When using stdin, -p should not have the prompt as argument
             
@@ -533,6 +546,11 @@ export class ExtensionMessageHandler {
             case 'system':
                 if (json.subtype === 'init') {
                     this.outputChannel.appendLine(`[JSON] System init - Model: ${json.model}, Session: ${json.session_id}`);
+                    // Store the session ID for future messages
+                    if (json.session_id) {
+                        this.currentSessionId = json.session_id;
+                        this.outputChannel.appendLine(`[DEBUG] Stored session ID: ${this.currentSessionId}`);
+                    }
                     onMetadata({
                         sessionId: json.session_id,
                         apiKeySource: json.apiKeySource

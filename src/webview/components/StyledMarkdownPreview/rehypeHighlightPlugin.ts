@@ -1,7 +1,7 @@
 import { visit } from 'unist-util-visit';
 
 // Simple syntax highlighting plugin that adds language classes
-export const rehypeHighlightPlugin = (options: { isRenderingInStepContainer?: boolean } = {}) => {
+const rehypeHighlightPluginImpl = (options: { isRenderingInStepContainer?: boolean } = {}) => {
     return (tree: any) => {
         visit(tree, 'element', (node) => {
             if (node.tagName === 'pre') {
@@ -20,5 +20,13 @@ export const rehypeHighlightPlugin = (options: { isRenderingInStepContainer?: bo
                 }
             }
         });
+        
+        // Explicitly return void to satisfy TypeScript
+        return;
     };
+};
+
+// Export function that returns [plugin, options] format expected by react-remark
+export const rehypeHighlightPlugin = (options: { isRenderingInStepContainer?: boolean } = {}) => {
+    return [rehypeHighlightPluginImpl, options];
 };
