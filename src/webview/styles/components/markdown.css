@@ -1,0 +1,298 @@
+/* Direct copy from GUI's markdown.css - GitHub-flavored markdown styling */
+@media (prefers-color-scheme: dark) {
+  .wmde-markdown,
+  .wmde-markdown-var {
+    color-scheme: dark;
+    --color-prettylights-syntax-comment: #8b949e;
+    --color-prettylights-syntax-constant: #79c0ff;
+    --color-prettylights-syntax-entity: #d2a8ff;
+    --color-prettylights-syntax-storage-modifier-import: #c9d1d9;
+    --color-prettylights-syntax-entity-tag: #7ee787;
+    --color-prettylights-syntax-keyword: #ff7b72;
+    --color-prettylights-syntax-string: #a5d6ff;
+    --color-prettylights-syntax-variable: #ffa657;
+    --color-prettylights-syntax-brackethighlighter-unmatched: #f85149;
+    --color-prettylights-syntax-invalid-illegal-text: #f0f6fc;
+    --color-prettylights-syntax-invalid-illegal-bg: #8e1519;
+    --color-prettylights-syntax-carriage-return-text: #f0f6fc;
+    --color-prettylights-syntax-carriage-return-bg: #b62324;
+    --color-prettylights-syntax-string-regexp: #7ee787;
+    --color-prettylights-syntax-markup-list: #f2cc60;
+    --color-prettylights-syntax-markup-heading: #1f6feb;
+    --color-prettylights-syntax-markup-italic: #c9d1d9;
+    --color-prettylights-syntax-markup-bold: #c9d1d9;
+    --color-prettylights-syntax-markup-deleted-text: #ffdcd7;
+    --color-prettylights-syntax-markup-deleted-bg: #67060c;
+    --color-prettylights-syntax-markup-inserted-text: #aff5b4;
+    --color-prettylights-syntax-markup-inserted-bg: #033a16;
+    --color-prettylights-syntax-markup-changed-text: #ffdfb6;
+    --color-prettylights-syntax-markup-changed-bg: #5a1e02;
+    --color-prettylights-syntax-markup-ignored-text: #c9d1d9;
+    --color-prettylights-syntax-markup-ignored-bg: #1158c7;
+    --color-prettylights-syntax-meta-diff-range: #d2a8ff;
+    --color-prettylights-syntax-brackethighlighter-angle: #8b949e;
+    --color-prettylights-syntax-sublimelinter-gutter-mark: #484f58;
+    --color-prettylights-syntax-constant-other-reference-link: #a5d6ff;
+    --color-fg-default: #c9d1d9;
+    --color-fg-muted: #8b949e;
+    --color-fg-subtle: #484f58;
+    --color-canvas-default: #0d1117;
+    --color-canvas-subtle: #161b22;
+    --color-border-default: #30363d;
+    --color-border-muted: #21262d;
+    --color-neutral-muted: rgba(110, 118, 129, 0.4);
+    --color-accent-fg: #58a6ff;
+    --color-accent-emphasis: #1f6feb;
+    --color-attention-subtle: rgba(187, 128, 9, 0.15);
+    --color-danger-fg: #f85149;
+  }
+}
+
+/* VS Code specific markdown styles */
+.vscode-dark .wmde-markdown,
+.vscode-dark .wmde-markdown-var {
+  --color-fg-default: var(--vscode-editor-foreground);
+  --color-fg-muted: var(--vscode-descriptionForeground);
+  --color-canvas-default: var(--vscode-editor-background);
+  --color-canvas-subtle: var(--vscode-sideBar-background);
+  --color-border-default: var(--vscode-panel-border);
+  --color-border-muted: var(--vscode-panel-border);
+  --color-accent-fg: var(--vscode-textLink-foreground);
+  --color-accent-emphasis: var(--vscode-textLink-activeForeground);
+}
+
+.vscode-light .wmde-markdown,
+.vscode-light .wmde-markdown-var {
+  --color-fg-default: var(--vscode-editor-foreground);
+  --color-fg-muted: var(--vscode-descriptionForeground);
+  --color-canvas-default: var(--vscode-editor-background);
+  --color-canvas-subtle: var(--vscode-sideBar-background);
+  --color-border-default: var(--vscode-panel-border);
+  --color-border-muted: var(--vscode-panel-border);
+  --color-accent-fg: var(--vscode-textLink-foreground);
+  --color-accent-emphasis: var(--vscode-textLink-activeForeground);
+}
+
+/* Main markdown styles */
+.wmde-markdown {
+  -webkit-text-size-adjust: 100%;
+  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  color: var(--color-fg-default);
+  background-color: transparent;
+}
+
+.wmde-markdown h1,
+.wmde-markdown h2,
+.wmde-markdown h3,
+.wmde-markdown h4,
+.wmde-markdown h5,
+.wmde-markdown h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.wmde-markdown h1 {
+  margin: 0.67em 0;
+  font-weight: 600;
+  padding-bottom: 0.3em;
+  font-size: 2em;
+  border-bottom: 1px solid var(--color-border-muted);
+}
+
+.wmde-markdown h2 {
+  font-weight: 600;
+  padding-bottom: 0.3em;
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--color-border-muted);
+}
+
+.wmde-markdown h3 {
+  font-weight: 600;
+  font-size: 1.25em;
+}
+
+.wmde-markdown h4 {
+  font-weight: 600;
+  font-size: 1em;
+}
+
+.wmde-markdown h5 {
+  font-weight: 600;
+  font-size: 0.875em;
+}
+
+.wmde-markdown h6 {
+  font-weight: 600;
+  font-size: 0.85em;
+  color: var(--color-fg-muted);
+}
+
+.wmde-markdown p {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.wmde-markdown blockquote {
+  margin: 0;
+  padding: 0 1em;
+  color: var(--color-fg-muted);
+  border-left: 0.25em solid var(--color-border-default);
+}
+
+.wmde-markdown ul,
+.wmde-markdown ol {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-left: 2em;
+}
+
+.wmde-markdown code,
+.wmde-markdown tt {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: var(--color-neutral-muted);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, SF Mono, Menlo,
+    Consolas, Liberation Mono, monospace;
+}
+
+.wmde-markdown pre {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: var(--color-canvas-subtle);
+  border-radius: 6px;
+  overflow: auto;
+  padding: 16px;
+}
+
+.wmde-markdown pre code {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  font-size: 100%;
+}
+
+/* Syntax highlighting */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--color-prettylights-syntax-comment);
+}
+
+.token.property,
+.token.tag,
+.token.selector,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: var(--color-prettylights-syntax-entity-tag);
+}
+
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: var(--color-prettylights-syntax-string);
+}
+
+.token.keyword,
+.token.attr-name,
+.token.rule,
+.token.regex,
+.token.important {
+  color: var(--color-prettylights-syntax-keyword);
+}
+
+.token.function,
+.token.class-name {
+  color: var(--color-prettylights-syntax-entity);
+}
+
+.token.variable {
+  color: var(--color-prettylights-syntax-variable);
+}
+
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+/* Tables */
+.wmde-markdown table {
+  border-spacing: 0;
+  border-collapse: collapse;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+}
+
+.wmde-markdown table th {
+  font-weight: 600;
+}
+
+.wmde-markdown table th,
+.wmde-markdown table td {
+  padding: 6px 13px;
+  border: 1px solid var(--color-border-default);
+}
+
+.wmde-markdown table tr {
+  background-color: var(--color-canvas-default);
+  border-top: 1px solid var(--color-border-muted);
+}
+
+.wmde-markdown table tr:nth-child(2n) {
+  background-color: var(--color-canvas-subtle);
+}
+
+/* Links */
+.wmde-markdown a {
+  color: var(--color-accent-fg);
+  text-decoration: none;
+}
+
+.wmde-markdown a:hover {
+  text-decoration: underline;
+}
+
+/* Images */
+.wmde-markdown img {
+  max-width: 100%;
+  box-sizing: content-box;
+  background-color: var(--color-canvas-default);
+}
+
+/* Horizontal rule */
+.wmde-markdown hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: var(--color-border-default);
+  border: 0;
+}
+
+/* Task lists */
+.wmde-markdown .task-list-item {
+  list-style-type: none;
+}
+
+.wmde-markdown .task-list-item input[type="checkbox"] {
+  margin: 0 0.2em 0.25em -1.6em;
+  vertical-align: middle;
+}

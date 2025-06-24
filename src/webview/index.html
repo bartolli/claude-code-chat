@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src <%= cspSource %> 'unsafe-inline'; script-src <%= cspSource %>; img-src <%= cspSource %> https: data:; font-src <%= cspSource %>;">
+    <title>Claude Code Chat</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            font-weight: var(--vscode-font-weight);
+        }
+        
+        #root {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* VS Code CSS variables are available in webviews */
+        .vscode-light {
+            --primary-color: #007acc;
+        }
+        
+        .vscode-dark {
+            --primary-color: #3794ff;
+        }
+        
+        .vscode-high-contrast {
+            --primary-color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div style="display: flex; align-items: center; justify-content: center; height: 100vh;">
+            <div style="text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 10px;">Loading Claude Code Chat...</div>
+                <div style="opacity: 0.7;">Please wait while we initialize the interface</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

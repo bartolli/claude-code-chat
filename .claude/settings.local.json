@@ -5,7 +5,22 @@
       "Bash(grep:*)",
       "Bash(sed:*)",
       "Bash(rg:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm test)",
+      "Bash(mv:*)",
+      "Bash(node:*)",
+      "Bash(npm run:*)",
+      "Bash(npx vsce:*)",
+      "Bash(ls:*)",
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Bash(curl:*)",
+      "Bash(chmod:*)",
+      "Bash(code:*)",
+      "Bash(vsce package:*)",
+      "Bash(claude:*)",
+      "Bash(make:*)"
     ],
     "deny": []
   },

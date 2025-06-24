@@ -1,0 +1,448 @@
+import * as vscode from 'vscode';
+import { ServiceContainer } from '../core/ServiceContainer';
+import { Logger } from '../core/Logger';
+import { ClaudeProcessManager } from './ClaudeProcessManager';
+import { StreamProcessor } from './StreamProcessor';
+import { WebviewProtocol } from '../protocol/WebviewProtocol';
+import { FromWebviewMessageType, FromWebviewProtocol } from '../protocol/types';
+import { StateManager } from '../state/StateManager';
+import { ChunkedJSONParser } from './ChunkedJSONParser';
+import { ClaudeStreamMessage } from '../types/claude';
+
+/**
+ * Handles messages from the webview and coordinates with Claude Code process
+ */
+export class ExtensionMessageHandler {
+    private logger: Logger;
+    private processManager: ClaudeProcessManager;
+    private streamProcessor: StreamProcessor;
+    private stateManager: StateManager;
+    private webviewProtocol: WebviewProtocol | null = null;
+    private jsonParser: ChunkedJSONParser;
+
+    constructor(
+        private context: vscode.ExtensionContext,
+        private serviceContainer: ServiceContainer
+    ) {
+        this.logger = serviceContainer.get('Logger') as Logger;
+        this.processManager = serviceContainer.get('ClaudeProcessManager') as ClaudeProcessManager;
+        this.streamProcessor = serviceContainer.get('StreamProcessor') as StreamProcessor;
+        this.stateManager = serviceContainer.get('StateManager') as StateManager;
+        this.jsonParser = serviceContainer.get('ChunkedJSONParser') as ChunkedJSONParser;
+    }
+
+    /**
+     * Attach to a webview panel
+     */
+    public attach(webviewProtocol: WebviewProtocol): void {
+        this.webviewProtocol = webviewProtocol;
+    }
+
+    /**
+     * Handle a message from the webview
+     */
+    public async handleMessage<T extends FromWebviewMessageType>(
+        type: T,
+        data: FromWebviewProtocol[T][0]
+    ): Promise<FromWebviewProtocol[T][1]> {
+        this.logger.info(`Handling message: ${type}`, { data });
+
+        switch (type) {
+            case 'chat/sendMessage':
+                return this.handleSendMessage(data as FromWebviewProtocol['chat/sendMessage'][0]) as any;
+            
+            case 'chat/stopRequest':
+                return this.handleStopRequest() as any;
+            
+            case 'chat/newSession':
+                return this.handleNewSession() as any;
+            
+            case 'settings/get':
+                return this.handleGetSettings() as any;
+            
+            case 'settings/update':
+                return this.handleUpdateSettings(data as FromWebviewProtocol['settings/update'][0]) as any;
+            
+            case 'settings/selectModel':
+                return this.handleSelectModel(data as FromWebviewProtocol['settings/selectModel'][0]) as any;
+            
+            case 'conversation/getList':
+                return this.handleGetConversationList() as any;
+            
+            case 'conversation/load':
+                return this.handleLoadConversation(data as FromWebviewProtocol['conversation/load'][0]) as any;
+            
+            case 'file/getWorkspaceFiles':
+                return this.handleGetWorkspaceFiles(data as FromWebviewProtocol['file/getWorkspaceFiles'][0]) as any;
+            
+            case 'file/selectImage':
+                return this.handleSelectImage() as any;
+            
+            case 'file/getClipboardText':
+                return this.handleGetClipboardText() as any;
+            
+            default:
+                this.logger.warn(`Unhandled message type: ${type}`);
+                throw new Error(`Unhandled message type: ${type}`);
+        }
+    }
+
+    /**
+     * Handle sending a message to Claude
+     */
+    private async handleSendMessage(data: {
+        text: string;
+        planMode: boolean;
+        thinkingMode: boolean;
+        thinkingIntensity?: 'think' | 'think-hard' | 'think-harder';
+    }): Promise<void> {
+        const { text, planMode, thinkingMode, thinkingIntensity } = data;
+
+        // Update UI state
+        this.webviewProtocol?.post('status/processing', true);
+        this.webviewProtocol?.post('content/userInput', text);
+
+        try {
+            // Get current state
+            const state = this.stateManager.getState();
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const cwd = workspaceFolder ? workspaceFolder.uri.fsPath : process.cwd();
+
+            // Build Claude arguments
+            const args = this.buildClaudeArguments({
+                model: state.session.selectedModel,
+                planMode,
+                thinkingMode,
+                thinkingIntensity: thinkingIntensity || state.settings.thinkingIntensity,
+                sessionId: state.session.sessionId,
+                cwd
+            });
+
+            // Spawn Claude process
+            const process = await this.processManager.spawn('claude', args, {
+                cwd,
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+
+            // Send the message
+            process.stdin.write(text + '\n');
+            process.stdin.end();
+
+            // Process the stream
+            const jsonLines = this.createAsyncIterator(process.stdout);
+            
+            // Parse JSON lines and handle each message
+            for await (const line of jsonLines) {
+                try {
+                    const message = JSON.parse(line);
+                    await this.handleStreamChunk(message);
+                } catch (parseError) {
+                    this.logger.warn('Failed to parse JSON line', { line, error: parseError });
+                }
+            }
+
+            // Update totals when complete
+            const sessionState = this.stateManager.getState().session;
+            this.webviewProtocol?.post('totals/update', {
+                totalCost: sessionState.totalCost,
+                totalTokensInput: sessionState.totalTokensInput,
+                totalTokensOutput: sessionState.totalTokensOutput,
+                requestCount: sessionState.requestCount,
+                currentCost: sessionState.currentCost,
+                currentDuration: sessionState.currentDuration,
+                currentTurns: sessionState.currentTurns
+            });
+
+        } catch (error) {
+            this.logger.error('Error sending message to Claude', error);
+            this.webviewProtocol?.post('content/error', error instanceof Error ? error.message : 'Unknown error');
+        } finally {
+            this.webviewProtocol?.post('status/processing', false);
+        }
+    }
+
+    /**
+     * Handle a stream chunk from Claude
+     */
+    private async handleStreamChunk(chunk: any): Promise<void> {
+        try {
+            // Parse as Claude stream message
+            const message = chunk as ClaudeStreamMessage;
+            
+            // Forward to webview
+            this.webviewProtocol?.post('stream/claude', message);
+
+            // Update state based on message type
+            switch (message.type) {
+                case 'message_start':
+                    this.stateManager.dispatch({
+                        type: 'session/messageStarted',
+                        payload: {
+                            messageId: message.id || '',
+                            role: 'assistant'
+                        }
+                    });
+                    break;
+
+                case 'content_block_start':
+                    if (message.content_block?.type === 'text') {
+                        // Start a new content block
+                        this.webviewProtocol?.post('ui/updateElement', {
+                            id: `block_${message.index}`,
+                            type: 'text',
+                            content: message.content_block.text || '',
+                            metadata: { index: message.index }
+                        });
+                    } else if (message.content_block?.type === 'tool_use') {
+                        // Tool use started
+                        this.webviewProtocol?.post('content/toolUse', {
+                            toolInfo: `Tool: ${message.content_block.name}`,
+                            toolInput: JSON.stringify(message.content_block.input, null, 2),
+                            rawInput: message.content_block.input,
+                            toolName: message.content_block.name
+                        });
+                    }
+                    break;
+
+                case 'content_block_delta':
+                    if (message.delta?.type === 'text_delta') {
+                        this.webviewProtocol?.post('content/output', message.delta.text);
+                    } else if (message.delta?.type === 'input_json_delta') {
+                        // Tool input is being streamed
+                        // Could accumulate and update tool use display
+                    }
+                    break;
+                    
+                case 'thinking':
+                    // Claude is thinking (new feature)
+                    if (message.content) {
+                        this.webviewProtocol?.post('content/thinking', message.content);
+                    }
+                    break;
+                    
+                case 'content_block_stop':
+                    // Content block finished
+                    if (message.content_block?.type === 'tool_use') {
+                        // Tool execution complete
+                        this.webviewProtocol?.post('content/toolResult', {
+                            content: 'Tool execution complete',
+                            isError: false,
+                            toolUseId: message.content_block.id
+                        });
+                    }
+                    break;
+
+                case 'message_delta':
+                    if (message.usage) {
+                        this.webviewProtocol?.post('tokens/update', {
+                            totalTokensInput: message.usage.input_tokens || 0,
+                            totalTokensOutput: message.usage.output_tokens || 0,
+                            currentInputTokens: message.usage.input_tokens || 0,
+                            currentOutputTokens: message.usage.output_tokens || 0,
+                            cacheCreationTokens: message.usage.cache_creation_input_tokens || 0,
+                            cacheReadTokens: message.usage.cache_read_input_tokens || 0
+                        });
+                    }
+                    break;
+
+                case 'message_stop':
+                    this.stateManager.dispatch({
+                        type: 'session/messageCompleted',
+                        payload: {
+                            messageId: message.id || '',
+                            tokens: {
+                                input: message.usage?.input_tokens,
+                                output: message.usage?.output_tokens
+                            }
+                        }
+                    });
+                    break;
+            }
+        } catch (error) {
+            this.logger.error('Error handling stream chunk', error);
+        }
+    }
+
+    /**
+     * Build Claude CLI arguments
+     */
+    private buildClaudeArguments(options: {
+        model: string;
+        planMode: boolean;
+        thinkingMode: boolean;
+        thinkingIntensity: 'think' | 'think-hard' | 'think-harder';
+        sessionId?: string;
+        cwd: string;
+    }): string[] {
+        const args = ['--output-format', 'stream-json'];
+
+        // Add model
+        args.push('--model', options.model);
+
+        // Add modes
+        if (options.planMode) {
+            args.push('--plan');
+        }
+        if (options.thinkingMode && options.thinkingIntensity) {
+            args.push(`--${options.thinkingIntensity}`);
+        }
+
+        // Add session if available
+        if (options.sessionId) {
+            args.push('--resume', options.sessionId);
+        }
+
+        return args;
+    }
+
+    /**
+     * Create async iterator from readable stream
+     */
+    private async *createAsyncIterator(stream: NodeJS.ReadableStream): AsyncIterableIterator<string> {
+        let buffer = '';
+        
+        for await (const chunk of stream) {
+            buffer += chunk.toString();
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+                if (line.trim()) {
+                    yield line;
+                }
+            }
+        }
+        
+        if (buffer.trim()) {
+            yield buffer;
+        }
+    }
+
+    /**
+     * Handle stop request
+     */
+    private async handleStopRequest(): Promise<void> {
+        this.processManager.terminateAll();
+        this.webviewProtocol?.post('status/processing', false);
+    }
+
+    /**
+     * Handle new session
+     */
+    private async handleNewSession(): Promise<void> {
+        // Clear state
+        this.stateManager.dispatch({ type: 'session/cleared' });
+        
+        // Generate new session ID
+        const sessionId = `session_${Date.now()}`;
+        this.stateManager.dispatch({
+            type: 'session/resumed',
+            payload: { sessionId }
+        });
+
+        // Notify webview
+        this.webviewProtocol?.post('session/cleared', undefined);
+        this.webviewProtocol?.post('session/resumed', { sessionId });
+    }
+
+    /**
+     * Handle get settings
+     */
+    private async handleGetSettings(): Promise<Record<string, any>> {
+        const config = vscode.workspace.getConfiguration('claudeCodeChat');
+        return {
+            thinkingIntensity: config.get('thinkingIntensity', 'think'),
+            autoSaveConversations: config.get('autoSaveConversations', true),
+            showTokenCounts: config.get('showTokenCounts', true),
+            showCostEstimates: config.get('showCostEstimates', true)
+        };
+    }
+
+    /**
+     * Handle update settings
+     */
+    private async handleUpdateSettings(settings: Record<string, any>): Promise<void> {
+        const config = vscode.workspace.getConfiguration('claudeCodeChat');
+        
+        for (const [key, value] of Object.entries(settings)) {
+            await config.update(key, value, vscode.ConfigurationTarget.Global);
+        }
+
+        // Update state
+        this.stateManager.dispatch({
+            type: 'settings/updated',
+            payload: settings
+        });
+    }
+
+    /**
+     * Handle select model
+     */
+    private async handleSelectModel(data: { model: string }): Promise<void> {
+        this.stateManager.dispatch({
+            type: 'session/modelSelected',
+            payload: data.model
+        });
+        
+        this.webviewProtocol?.post('settings/modelSelected', data.model);
+    }
+
+    /**
+     * Handle get conversation list
+     */
+    private async handleGetConversationList(): Promise<Array<any>> {
+        // TODO: Implement conversation listing from file system
+        return [];
+    }
+
+    /**
+     * Handle load conversation
+     */
+    private async handleLoadConversation(_data: { filename: string }): Promise<void> {
+        // TODO: Implement conversation loading
+        this.logger.info('ExtensionMessageHandler', 'Loading conversation', { filename: _data.filename });
+    }
+
+    /**
+     * Handle get workspace files
+     */
+    private async handleGetWorkspaceFiles(data: { searchTerm?: string }): Promise<Array<{
+        relativePath: string;
+        isDirectory: boolean;
+    }>> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return [];
+        }
+
+        // TODO: Implement file search
+        return [];
+    }
+
+    /**
+     * Handle select image
+     */
+    private async handleSelectImage(): Promise<string | undefined> {
+        const result = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            filters: {
+                'Images': ['png', 'jpg', 'jpeg', 'gif', 'webp']
+            }
+        });
+
+        if (result && result[0]) {
+            return result[0].fsPath;
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Handle get clipboard text
+     */
+    private async handleGetClipboardText(): Promise<string> {
+        return await vscode.env.clipboard.readText();
+    }
+}

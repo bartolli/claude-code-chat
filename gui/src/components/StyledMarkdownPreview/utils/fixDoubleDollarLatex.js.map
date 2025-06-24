@@ -1,0 +1,1 @@
+{"version":3,"file":"fixDoubleDollarLatex.js","sourceRoot":"","sources":["fixDoubleDollarLatex.ts"],"names":[],"mappings":"AAAA;;;EAGE;AACF,MAAM,UAAU,2BAA2B,CAAC,IAAY;IACtD,mDAAmD;IACnD,MAAM,OAAO,GAAG,oCAAoC,CAAC;IAErD,qDAAqD;IACrD,MAAM,YAAY,GAAG,IAAI,CAAC,OAAO,CAAC,OAAO,EAAE,YAAY,CAAC,CAAC;IAEzD,OAAO,YAAY,CAAC;AACtB,CAAC"}

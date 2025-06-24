@@ -1,0 +1,16 @@
+import { ArrowLeftEndOnRectangleIcon } from "@heroicons/react/24/outline";
+import { ToolTip } from "../../gui/Tooltip";
+import HoverItem from "../../mainInput/InputToolbar/HoverItem";
+export function InsertButton({ onInsert }) {
+    return (<HoverItem data-tooltip-id="codeblock-insert-button-tooltip" className="!p-0">
+      <div className="text-lightgray flex cursor-pointer items-center border-none bg-transparent text-xs outline-none hover:brightness-125" onClick={onInsert}>
+        <div className="max-2xs:hidden flex items-center gap-1 transition-colors duration-200">
+          <ArrowLeftEndOnRectangleIcon className="h-3.5 w-3.5"/>
+        </div>
+      </div>
+      <ToolTip id="codeblock-insert-button-tooltip" place="top">
+        Insert Code
+      </ToolTip>
+    </HoverItem>);
+}
+//# sourceMappingURL=InsertButton.js.map

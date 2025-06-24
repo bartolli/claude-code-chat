@@ -1415,6 +1415,6 @@ const styles = `
         color: var(--vscode-descriptionForeground);
         opacity: 0.8;
     }
-</style>`
+</style>`;
 
-export default styles
+export default styles;

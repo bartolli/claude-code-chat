@@ -31,6 +31,24 @@ Ditch the command line and experience Claude Code like never before. This extens
 
 ---
 
+## 🔐 **Authentication Options**
+
+Claude Code Chat supports two authentication methods:
+
+### 1. **API Key Authentication** (Programmatic Access)
+- Create an API key in the [Anthropic Console](https://console.anthropic.com/)
+- Set the `ANTHROPIC_API_KEY` environment variable
+- Best for automated workflows and CI/CD pipelines
+
+### 2. **Interactive Authentication** (Claude Pro/Team Subscription)
+- Requires an active Claude Pro or Team subscription
+- Run `claude login` in your terminal to authenticate
+- Best for personal use with your existing Claude subscription
+
+The extension automatically detects which method to use based on your environment.
+
+---
+
 ## 🌟 **Key Features**
 
 ### 💬 **Beautiful Chat Graphical Interface**
