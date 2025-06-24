@@ -410,17 +410,29 @@ export class ExtensionMessageHandler {
                                 // Process the JSON message
                                 this.processClaudeStreamMessage(json, (content) => {
                                     assistantContent += content;
+                                    this.outputChannel.appendLine(`[DEBUG] webviewProtocol status: ${this.webviewProtocol ? 'available' : 'NULL'}`);
+                                    
                                     if (!isStreaming) {
                                         isStreaming = true;
-                                        this.webviewProtocol?.post('message/add', {
-                                            role: 'assistant',
-                                            content: assistantContent
-                                        });
+                                        if (this.webviewProtocol) {
+                                            this.outputChannel.appendLine(`[DEBUG] Sending message/add for assistant`);
+                                            this.webviewProtocol.post('message/add', {
+                                                role: 'assistant',
+                                                content: assistantContent
+                                            });
+                                        } else {
+                                            this.outputChannel.appendLine(`[ERROR] Cannot send message/add - webviewProtocol is NULL`);
+                                        }
                                     } else {
-                                        this.webviewProtocol?.post('message/update', {
-                                            role: 'assistant',
-                                            content: assistantContent
-                                        });
+                                        if (this.webviewProtocol) {
+                                            this.outputChannel.appendLine(`[DEBUG] Sending message/update`);
+                                            this.webviewProtocol.post('message/update', {
+                                                role: 'assistant',
+                                                content: assistantContent
+                                            });
+                                        } else {
+                                            this.outputChannel.appendLine(`[ERROR] Cannot send message/update - webviewProtocol is NULL`);
+                                        }
                                     }
                                 }, (metadata) => {
                                     if (metadata.sessionId) sessionId = metadata.sessionId;
@@ -537,6 +549,7 @@ export class ExtensionMessageHandler {
                         for (const block of json.message.content) {
                             if (block.type === 'text' && block.text) {
                                 this.outputChannel.appendLine(`[JSON] Text content: ${block.text.substring(0, 50)}...`);
+                                this.outputChannel.appendLine(`[DEBUG] Calling onContent callback with text`);
                                 onContent(block.text);
                             }
                         }

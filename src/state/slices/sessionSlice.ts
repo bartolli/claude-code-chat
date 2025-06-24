@@ -132,6 +132,112 @@ const sessionSlice = createSlice({
     // Load sessions from storage
     loadSessions: (state, action: PayloadAction<SessionState['sessions']>) => {
       state.sessions = action.payload;
+    },
+    
+    // Streaming message handling
+    messageAdded: (state, action: PayloadAction<{ role: 'user' | 'assistant'; content: string }>) => {
+      // Don't add empty messages
+      if (!action.payload.content && action.payload.role === 'assistant') {
+        return;
+      }
+      
+      // Ensure we have a current session
+      if (!state.currentSessionId) {
+        // Create a new session if none exists
+        const sessionId = uuidv4();
+        const now = Date.now();
+        state.sessions[sessionId] = {
+          id: sessionId,
+          title: 'New Conversation',
+          createdAt: now,
+          updatedAt: now,
+          model: 'default',
+          messages: [],
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalCost: 0
+        };
+        state.currentSessionId = sessionId;
+        state.activeSession = state.sessions[sessionId];
+      }
+      
+      const session = state.sessions[state.currentSessionId];
+      if (session) {
+        const message: ClaudeMessage = {
+          role: action.payload.role,
+          content: action.payload.content,
+          timestamp: Date.now()
+        };
+        
+        session.messages.push(message);
+        session.updatedAt = Date.now();
+        
+        if (state.activeSession?.id === state.currentSessionId) {
+          state.activeSession.messages = [...session.messages];
+        }
+      }
+    },
+    
+    messageUpdated: (state, action: PayloadAction<{ role: 'assistant'; content: string }>) => {
+      // Ensure we have a current session
+      if (!state.currentSessionId) {
+        // Create a new session if none exists
+        const sessionId = uuidv4();
+        const now = Date.now();
+        state.sessions[sessionId] = {
+          id: sessionId,
+          title: 'New Conversation',
+          createdAt: now,
+          updatedAt: now,
+          model: 'default',
+          messages: [],
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalCost: 0
+        };
+        state.currentSessionId = sessionId;
+        state.activeSession = state.sessions[sessionId];
+      }
+      
+      const session = state.sessions[state.currentSessionId];
+      if (session) {
+        // Find the last assistant message
+        let lastAssistantIndex = -1;
+        for (let i = session.messages.length - 1; i >= 0; i--) {
+          if (session.messages[i].role === 'assistant') {
+            lastAssistantIndex = i;
+            break;
+          }
+        }
+        
+        if (lastAssistantIndex !== -1) {
+          // Update existing assistant message
+          session.messages[lastAssistantIndex].content = action.payload.content;
+        } else {
+          // No assistant message yet, create one
+          const message: ClaudeMessage = {
+            role: 'assistant',
+            content: action.payload.content,
+            timestamp: Date.now()
+          };
+          session.messages.push(message);
+        }
+        
+        session.updatedAt = Date.now();
+        
+        if (state.activeSession?.id === state.currentSessionId) {
+          state.activeSession.messages = [...session.messages];
+        }
+      }
+    },
+    
+    messageCompleted: (state) => {
+      // Mark the current streaming as complete
+      state.isLoading = false;
+      
+      if (state.currentSessionId && state.sessions[state.currentSessionId]) {
+        state.sessions[state.currentSessionId].updatedAt = Date.now();
+      }
     }
   },
   extraReducers: (builder) => {
@@ -149,7 +255,10 @@ export const {
   setError,
   clearSession,
   deleteSession,
-  loadSessions
+  loadSessions,
+  messageAdded,
+  messageUpdated,
+  messageCompleted
 } = sessionSlice.actions;
 
 // Selectors

@@ -43,6 +43,7 @@ export class SimpleWebviewProtocol {
      * Send a message to the webview
      */
     public post(type: string, data: any): void {
+        console.log(`SimpleWebviewProtocol: Sending message to webview - type: ${type}, data:`, data);
         this.webview.postMessage({
             messageType: type,
             data

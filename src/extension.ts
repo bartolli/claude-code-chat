@@ -3,7 +3,6 @@ import * as cp from 'child_process';
 import * as util from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
-import html from './ui';
 
 const exec = util.promisify(cp.exec);
 
@@ -193,7 +192,13 @@ class ClaudeChatProvider {
     }
 
     private _setupMessageHandling() {
+        console.log('STEP3: _setupMessageHandling called', {
+            hasPanel: !!this._panel,
+            hasServices: !!this._services
+        });
+        
         if (!this._panel || !this._services) {
+            console.log('STEP3: Skipping message handling setup - missing panel or services');
             return;
         }
 

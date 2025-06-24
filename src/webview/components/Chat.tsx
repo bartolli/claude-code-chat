@@ -87,15 +87,8 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
             thinkingMode: false
         });
         
-        // Update local state to show user message immediately
-        dispatch({
-            type: 'session/messageAdded',
-            payload: {
-                role: 'user' as const,
-                content: message
-            }
-        });
-    }, [messenger, dispatch]);
+        // Don't dispatch here - the backend will send the user message back
+    }, [messenger]);
     
     const handleNewChat = useCallback(() => {
         console.log('New chat');
