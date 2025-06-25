@@ -98,13 +98,6 @@ export class ExtensionMessageHandler {
                 this.handlePermissionResponse(permissionData);
                 return undefined as any;
             
-            case 'settings/executeSlashCommand':
-                // Handle slash command execution
-                const { command } = data as any;
-                this.logger.info('ExtensionMessageHandler', 'Executing slash command', { command });
-                this.executeSlashCommand(command);
-                return undefined as any;
-            
             default:
                 this.logger.warn('ExtensionMessageHandler', `Unhandled message type: ${type}`);
                 return undefined as any;
@@ -122,6 +115,14 @@ export class ExtensionMessageHandler {
             // Make sure output channel is visible
             // Use the correct command for focusing on output panel
             vscode.commands.executeCommand('workbench.panel.output.focus');
+            
+            // Check if this is a slash command
+            const isSlashCommand = data.text.trim().startsWith('/');
+            if (isSlashCommand) {
+                this.outputChannel.appendLine(`[DEBUG] Detected slash command: ${data.text}`);
+                this.handleSlashCommand(data.text.trim());
+                return;
+            }
             
             // Get selected model
             const selectedModel = this.context.workspaceState.get<string>('selectedModel', 'sonnet');
@@ -879,13 +880,36 @@ export class ExtensionMessageHandler {
     }
 
     /**
-     * Execute a slash command in a terminal
+     * Handle slash commands by executing them in a terminal
      */
-    private executeSlashCommand(command: string): void {
-        this.outputChannel.appendLine(`\n[Slash Command] Executing: /${command}`);
+    private async handleSlashCommand(command: string): Promise<void> {
+        this.outputChannel.appendLine(`\n[Slash Command] Executing: ${command}`);
         
-        // Build command arguments
-        const args = [`/${command}`];
+        // Send the command to UI first
+        if (this.webviewProtocol) {
+            this.webviewProtocol.post('message/add', {
+                role: 'user',
+                content: command
+            });
+            
+            // Send a message about opening terminal
+            this.webviewProtocol.post('message/add', {
+                role: 'assistant',
+                content: `Opening terminal to execute ${command}. Check the terminal for output.`
+            });
+            
+            this.webviewProtocol.post('status/processing', false);
+        }
+        
+        // Get workspace folder for cwd
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const cwd = workspaceFolder ? workspaceFolder.uri.fsPath : process.cwd();
+        
+        // Extract command name (remove the /)
+        const commandName = command.substring(1).split(' ')[0];
+        
+        // Build command arguments - slash commands are passed directly to claude
+        const args = [command];
         
         // Add session resume if we have a current session
         if (this.currentSessionId) {
@@ -894,21 +918,28 @@ export class ExtensionMessageHandler {
         }
         
         // Create terminal with the claude command
-        const terminal = vscode.window.createTerminal(`Claude /${command}`);
+        const terminal = vscode.window.createTerminal({
+            name: `Claude ${command}`,
+            cwd: cwd,
+            env: process.env
+        });
         terminal.sendText(`claude ${args.join(' ')}`);
         terminal.show();
         
         // Show info message
         vscode.window.showInformationMessage(
-            `Executing /${command} command in terminal. Check the terminal output and return when ready.`,
+            `Executing ${command} command in terminal. Check the terminal output and return when ready.`,
             'OK'
         );
         
-        // Send message to UI about terminal
-        this.webviewProtocol?.post('terminal/opened', {
-            message: `Executing /${command} command in terminal. Check the terminal output and return when ready.`
-        });
+        // Send terminal opened message to UI
+        if (this.webviewProtocol) {
+            this.webviewProtocol.post('terminal/opened', { 
+                message: `Executing ${command} command in terminal. Check the terminal output and return when ready.`
+            });
+        }
         
-        this.outputChannel.appendLine(`[Slash Command] Terminal opened for /${command}`);
+        this.outputChannel.appendLine(`[Slash Command] Terminal opened for ${command}`);
     }
+
 }

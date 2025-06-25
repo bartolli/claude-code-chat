@@ -246,7 +246,6 @@ export interface FromWebviewProtocol {
     'settings/update': [Record<string, any>, void];
     'settings/selectModel': [{ model: string }, void];
     'settings/openModelTerminal': [void, void];
-    'settings/executeSlashCommand': [{ command: string }, void];
 
     // Streaming requests
     'stream/start': [{ requestId: string }, void];

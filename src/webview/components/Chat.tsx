@@ -10,7 +10,7 @@ import { ModelOption } from './ModelSelector';
 import { EmptyChatBody } from './EmptyChatBody';
 import { PermissionPrompt } from './PermissionPrompt';
 import { WaitingIndicator } from './WaitingIndicator';
-import { selectCurrentSession, addMessage, clearSession } from '../../state/slices/sessionSlice';
+import { selectCurrentSession } from '../../state/slices/sessionSlice';
 import { selectIsProcessing } from '../../state/slices/claudeSlice';
 import { selectAvailableModels, selectSelectedModelId, setSelectedModel } from '../../state/slices/configSlice';
 import { clearPermissionRequest } from '../../state/slices/uiSlice';
@@ -96,101 +96,7 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
     const handleSubmit = useCallback((message: string) => {
         console.log('Message submitted:', message);
         
-        // Check if this is a slash command
-        if (message.startsWith('/')) {
-            const commandParts = message.substring(1).trim().split(' ');
-            const command = commandParts[0];
-            const args = commandParts.slice(1).join(' ');
-            
-            // Handle slash commands internally
-            switch (command) {
-                case 'help':
-                    // Add help message to chat
-                    dispatch(addMessage({
-                        role: 'assistant',
-                        content: `Available commands:
-• /help - Show this help message
-• /clear - Clear the conversation
-• /model - Change the AI model
-• /cost - Show current session cost
-• /status - Show current status
-• /config - Open configuration
-• /mcp - Manage MCP servers
-• /ide - Manage IDE integrations
-• /permissions - Manage permissions
-• /memory - View memory usage
-• /login - Login to Claude
-• /logout - Logout from Claude
-• /exit - Exit the session
-
-For more commands, use the terminal with \`claude /help\`.`
-                    }));
-                    return;
-                    
-                case 'clear':
-                    // Clear messages in current session
-                    if (currentSession?.id) {
-                        dispatch(clearSession(currentSession.id));
-                        dispatch(addMessage({
-                            role: 'assistant',
-                            content: 'Conversation cleared.'
-                        }));
-                    }
-                    return;
-                    
-                case 'cost':
-                    // Show cost information
-                    const cost = currentSession?.totalCost || 0;
-                    const inputTokens = currentSession?.inputTokens || 0;
-                    const outputTokens = currentSession?.outputTokens || 0;
-                    dispatch(addMessage({
-                        role: 'assistant',
-                        content: `Session cost:
-• Total cost: $${cost.toFixed(4)}
-• Input tokens: ${inputTokens.toLocaleString()}
-• Output tokens: ${outputTokens.toLocaleString()}`
-                    }));
-                    return;
-                    
-                case 'status':
-                    // Show status
-                    dispatch(addMessage({
-                        role: 'assistant',
-                        content: `Status:
-• Session: ${currentSession?.id || 'No active session'}
-• Model: ${selectedModelId || 'claude-3-5-sonnet-20241022'}
-• Messages: ${messages.length}
-• Working: ${showWaitingIndicator ? 'Yes' : 'No'}`
-                    }));
-                    return;
-                    
-                case 'model':
-                    // If no args, show current model
-                    if (!args) {
-                        dispatch(addMessage({
-                            role: 'assistant',
-                            content: `Current model: ${selectedModelId || 'claude-3-5-sonnet-20241022'}
-Available models:
-• claude-3-5-sonnet-20241022
-• claude-3-5-haiku-20241022
-• claude-3-opus-20240229`
-                        }));
-                        return;
-                    }
-                    // Otherwise change model - fall through to send command
-                    break;
-                    
-                default:
-                    // For unhandled commands, show a message
-                    dispatch(addMessage({
-                        role: 'assistant',
-                        content: `Command /${command} is not available in the webview. Try using the terminal with \`claude /${command}\`.`
-                    }));
-                    return;
-            }
-        }
-        
-        // Send regular message or unhandled slash commands
+        // Send all messages (including slash commands) to Claude
         messenger.post('chat/sendMessage', {
             text: message,
             planMode: false,
@@ -198,7 +104,7 @@ Available models:
         });
         
         // Don't dispatch here - the backend will send the user message back
-    }, [messenger, dispatch, currentSession, selectedModelId, messages.length, showWaitingIndicator]);
+    }, [messenger]);
     
     const handleNewChat = useCallback(() => {
         console.log('New chat');

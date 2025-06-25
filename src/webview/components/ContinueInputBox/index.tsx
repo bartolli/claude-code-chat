@@ -28,27 +28,7 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
     const handleSubmit = (text?: string) => {
         const messageText = text || content;
         if (messageText.trim() && !disabled) {
-            // Check if this is a slash command
-            if (messageText.startsWith('/') && messenger) {
-                const command = messageText.substring(1).trim().split(' ')[0];
-                // List of known slash commands
-                const knownCommands = [
-                    'help', 'status', 'add-dir', 'bug', 'clear', 'compact', 'config',
-                    'cost', 'doctor', 'exit', 'ide', 'init', 'install-github-app',
-                    'login', 'logout', 'mcp', 'memory', 'migrate-installer', 'model',
-                    'permissions', 'pr-comments', 'release-notes', 'resume', 'review',
-                    'terminal-setup', 'upgrade', 'vim'
-                ];
-                
-                if (knownCommands.includes(command)) {
-                    // Execute slash command in terminal
-                    messenger.post('settings/executeSlashCommand', { command });
-                    setContent('');
-                    return;
-                }
-            }
-            
-            // Regular message
+            // Send all messages (including slash commands) through the normal flow
             if (onSubmit) {
                 onSubmit(messageText);
                 setContent('');
