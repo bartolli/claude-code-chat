@@ -70,7 +70,7 @@ export const App: React.FC<AppProps> = ({ messenger }) => {
         unsubscribers.push(
             messenger.on('status/processing', (isProcessing) => {
                 dispatch({
-                    type: 'ui/setProcessing',
+                    type: 'claude/setProcessing',
                     payload: isProcessing
                 });
             })
@@ -142,6 +142,59 @@ export const App: React.FC<AppProps> = ({ messenger }) => {
                 dispatch({
                     type: 'ui/showError',
                     payload: error.message
+                });
+            })
+        );
+
+        unsubscribers.push(
+            messenger.on('message/thinking', (data) => {
+                // Handle thinking messages
+                dispatch({
+                    type: 'session/thinkingUpdated',
+                    payload: data
+                });
+            })
+        );
+
+        unsubscribers.push(
+            messenger.on('message/toolUse', (data) => {
+                // Handle tool use messages
+                dispatch({
+                    type: 'session/toolUseAdded',
+                    payload: data
+                });
+            })
+        );
+
+        unsubscribers.push(
+            messenger.on('message/toolResult', (data) => {
+                // Handle tool result messages
+                dispatch({
+                    type: 'session/toolResultAdded',
+                    payload: data
+                });
+            })
+        );
+
+        unsubscribers.push(
+            messenger.on('permission/request', (data) => {
+                // Handle permission requests
+                dispatch({
+                    type: 'ui/showPermissionRequest',
+                    payload: data
+                });
+            })
+        );
+
+        unsubscribers.push(
+            messenger.on('terminal/opened', (data) => {
+                // Handle terminal opened notification
+                dispatch({
+                    type: 'ui/showNotification',
+                    payload: {
+                        message: data.message,
+                        type: 'info'
+                    }
                 });
             })
         );

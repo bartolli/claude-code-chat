@@ -169,7 +169,9 @@ export const StyledMarkdownPreview: React.FC<StyledMarkdownPreviewProps> = memo(
         hasContent: !!reactContent,
         contentType: typeof reactContent,
         isArray: Array.isArray(reactContent),
-        contentLength: Array.isArray(reactContent) ? reactContent.length : 'not array'
+        contentLength: Array.isArray(reactContent) ? reactContent.length : 'not array',
+        // Add more debugging to see what's actually returned
+        reactContentSample: reactContent ? JSON.stringify(reactContent).substring(0, 100) : 'null/undefined'
     });
 
     return (

@@ -1,12 +1,13 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const webpack = require('webpack');
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const isDevServer = process.env.WEBPACK_SERVE === 'true' || process.argv.includes('serve');
 
 module.exports = {
     mode: isDevelopment ? 'development' : 'production',
+    // Webpack automatically sets process.env.NODE_ENV based on mode
+    // So we don't need to define it again
     
     entry: {
         webview: isDevServer ? './src/webview/dev-app.tsx' : './src/webview/index.tsx'
@@ -65,9 +66,6 @@ module.exports = {
             templateParameters: {
                 cspSource: isDevServer ? '' : '${cspSource}' // No CSP for dev server
             }
-        }),
-        new webpack.DefinePlugin({
-            'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
         })
     ],
     
@@ -77,6 +75,13 @@ module.exports = {
     optimization: {
         // Bundle everything into a single file for VS Code webview
         splitChunks: false
+    },
+    
+    // Suppress size warnings - VS Code extensions can have larger bundles
+    performance: {
+        hints: false,
+        maxEntrypointSize: 2097152, // 2MB
+        maxAssetSize: 2097152 // 2MB
     },
     
     // Development server (for testing outside VS Code)

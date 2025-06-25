@@ -92,6 +92,8 @@ export const selectAvailableModels = (state: { config: ConfigState }) => state.c
 export const selectSelectedModelId = (state: { config: ConfigState }) => state.config.selectedModel;
 export const selectSelectedModel = (state: { config: ConfigState }) => {
   const modelId = state.config.selectedModel;
+  if (!modelId) return null;
+  
   const availableModels = state.config.availableModels || [];
   const model = availableModels.find(m => m.id === modelId);
   return model || {

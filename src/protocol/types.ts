@@ -116,6 +116,9 @@ export interface ToWebviewProtocol {
     'settings/data': [void, Record<string, any>];
     'settings/modelSelected': [void, string];
     'settings/terminalOpened': [void, string];
+    
+    // Terminal messages
+    'terminal/opened': [void, { message: string }];
 
     // Progressive UI Updates
     'ui/updateElement': [void, {
@@ -153,6 +156,55 @@ export interface ToWebviewProtocol {
 
     // Stream Messages
     'stream/claude': [void, ClaudeStreamMessage];
+    
+    // Permission handling
+    'permission/request': [void, {
+        toolName: string;
+        toolId: string;
+        toolInput: any;
+    }];
+    
+    // Error handling
+    'error/show': [void, { message: string }];
+    
+    // Chat message protocol
+    'message/add': [void, {
+        role: 'user' | 'assistant';
+        content: string;
+        thinking?: string;
+        toolUses?: Array<{
+            toolName: string;
+            toolId: string;
+            input: any;
+            result?: string;
+            isError?: boolean;
+        }>;
+    }];
+    'message/update': [void, {
+        role: 'assistant';
+        content: string;
+    }];
+    'message/thinking': [void, {
+        content: string;
+        isActive: boolean;
+    }];
+    'message/toolUse': [void, {
+        toolName: string;
+        toolId: string;
+        input: any;
+        status: string;
+    }];
+    'message/toolResult': [void, {
+        toolId: string;
+        result: string;
+        isError?: boolean;
+        status: string;
+    }];
+    'chat/messageComplete': [void, {
+        sessionId?: string;
+        totalCost?: number;
+        duration?: number;
+    }];
 }
 
 // ============= Webview to Extension Messages =============
@@ -199,6 +251,13 @@ export interface FromWebviewProtocol {
     // Streaming requests
     'stream/start': [{ requestId: string }, void];
     'stream/abort': [{ requestId: string }, void];
+    
+    // Permission handling
+    'permission/response': [{
+        toolId: string;
+        toolName: string;
+        approved: boolean;
+    }, void];
 }
 
 // Helper types for type safety

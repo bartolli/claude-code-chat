@@ -26,6 +26,14 @@ export interface ClaudeMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: number;
+  toolUses?: Array<{
+    toolName: string;
+    toolId: string;
+    input: any;
+    result?: string;
+    isError?: boolean;
+  }>;
+  thinking?: string;
 }
 
 export interface ToolUse {

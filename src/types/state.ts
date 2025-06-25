@@ -32,6 +32,11 @@ export interface UIState {
   showThinking: boolean;
   showCost: boolean;
   expandedTools: Record<string, boolean>;
+  permissionRequest: {
+    toolName: string;
+    toolId: string;
+    toolInput: any;
+  } | null;
 }
 
 export interface ProcessState {

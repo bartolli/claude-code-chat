@@ -20,7 +20,8 @@
       "Bash(code:*)",
       "Bash(vsce package:*)",
       "Bash(claude:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(jq:*)"
     ],
     "deny": []
   },

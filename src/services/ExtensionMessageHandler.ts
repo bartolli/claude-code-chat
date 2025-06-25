@@ -19,6 +19,8 @@ export class ExtensionMessageHandler {
     private streamProcessor: StreamProcessor;
     private jsonParser: ChunkedJSONParser;
     private currentSessionId: string | null = null;
+    private currentClaudeProcess: cp.ChildProcess | null = null;
+    private pendingPermissionResponses: Map<string, (response: string) => void> = new Map();
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -89,6 +91,20 @@ export class ExtensionMessageHandler {
                     conversations: []
                 } as any;
             
+            case 'permission/response':
+                // Handle permission response
+                const permissionData = data as any;
+                this.logger.info('ExtensionMessageHandler', 'Permission response', permissionData);
+                this.handlePermissionResponse(permissionData);
+                return undefined as any;
+            
+            case 'settings/executeSlashCommand':
+                // Handle slash command execution
+                const { command } = data as any;
+                this.logger.info('ExtensionMessageHandler', 'Executing slash command', { command });
+                this.executeSlashCommand(command);
+                return undefined as any;
+            
             default:
                 this.logger.warn('ExtensionMessageHandler', `Unhandled message type: ${type}`);
                 return undefined as any;
@@ -118,6 +134,10 @@ export class ExtensionMessageHandler {
                     content: data.text
                 });
                 this.outputChannel.appendLine(`[DEBUG] Sent user message to UI`);
+                
+                // Set processing status to true
+                this.webviewProtocol.post('status/processing', true);
+                this.outputChannel.appendLine(`[DEBUG] Set processing status to true`);
             } else {
                 this.outputChannel.appendLine(`[ERROR] WebviewProtocol not initialized!`);
                 throw new Error('WebviewProtocol not initialized');
@@ -141,6 +161,9 @@ export class ExtensionMessageHandler {
             }
             
             args.push('--output-format', 'stream-json', '--verbose');
+            
+            // Skip permission prompts to avoid blocking the process
+            args.push('--dangerously-skip-permissions');
             
             // Note: When using stdin, -p should not have the prompt as argument
             
@@ -286,20 +309,27 @@ export class ExtensionMessageHandler {
                 env: processEnv
             });
             
+            // Store the current process for permission handling
+            this.currentClaudeProcess = claudeProcess;
+            
             this.outputChannel.appendLine(`[Process] Spawned with PID: ${claudeProcess.pid}`);
             this.outputChannel.appendLine(`[Process] Connected: ${claudeProcess.connected}`);
             
-            // Add timeout to detect hanging process (increased to 60 seconds for debugging)
+            // Add timeout to detect hanging process (10 minutes for long operations)
+            const PROCESS_TIMEOUT_MS = 600000; // 10 minutes
+            let lastActivityTime = Date.now();
+            
             const timeout = setTimeout(() => {
-                this.outputChannel.appendLine(`[WARNING] Process timeout after 60 seconds`);
+                const inactiveTime = Date.now() - lastActivityTime;
+                this.outputChannel.appendLine(`[WARNING] Process timeout after ${PROCESS_TIMEOUT_MS/1000} seconds (inactive for ${inactiveTime/1000}s)`);
                 if (claudeProcess.killed === false) {
                     this.outputChannel.appendLine(`[WARNING] Killing hanging process`);
                     claudeProcess.kill();
                     this.webviewProtocol?.post('error/show', {
-                        message: 'Claude process timed out. This might indicate an authentication issue or the CLI is waiting for input.'
+                        message: 'Claude process timed out after 10 minutes. This might indicate an authentication issue or the CLI is waiting for input.'
                     });
                 }
-            }, 60000);
+            }, PROCESS_TIMEOUT_MS);
             
             // Handle spawn event
             claudeProcess.on('spawn', () => {
@@ -321,14 +351,31 @@ export class ExtensionMessageHandler {
             // Set encoding for stderr
             claudeProcess.stderr?.setEncoding('utf8');
             
-            // Capture stderr for debugging
+            // Capture stderr for debugging and permission prompts
             let stderrData = '';
             claudeProcess.stderr?.on('data', (chunk) => {
                 receivedData = true;
+                lastActivityTime = Date.now(); // Update activity time
                 const chunkStr = chunk.toString();
                 stderrData += chunkStr;
                 this.logger.error('ExtensionMessageHandler', 'Claude stderr:', chunkStr);
                 this.outputChannel.appendLine(`[STDERR] ${chunkStr.trim()}`);
+                
+                // Check if this is a permission prompt
+                // Claude might output something like "Allow Bash command? (y/n)"
+                if (chunkStr.includes('Allow') && chunkStr.includes('(y/n)')) {
+                    this.outputChannel.appendLine(`[Permission] Detected permission prompt in stderr`);
+                    // Extract tool name from prompt
+                    const match = chunkStr.match(/Allow (\w+).*\?/);
+                    const toolName = match ? match[1] : 'unknown';
+                    
+                    // Send permission request to UI
+                    this.webviewProtocol?.post('permission/request', {
+                        toolName: toolName,
+                        toolId: `perm_${Date.now()}`,
+                        toolInput: chunkStr
+                    });
+                }
             });
             
             // Add event listeners before processing stream
@@ -408,6 +455,7 @@ export class ExtensionMessageHandler {
                 // Direct stream handling with data event
                 claudeProcess.stdout.on('data', (chunk: string) => {
                     receivedData = true;
+                    lastActivityTime = Date.now(); // Update activity time
                     this.outputChannel.appendLine(`[DEBUG] Received chunk: ${chunk.length} chars`);
                     
                     jsonBuffer += chunk;
@@ -421,11 +469,13 @@ export class ExtensionMessageHandler {
                                 this.outputChannel.appendLine(`[DEBUG] Parsed JSON type: ${json.type}`);
                                 
                                 // Process the JSON message
+                                const streamingState = { isStreaming };
                                 this.processClaudeStreamMessage(json, (content) => {
                                     assistantContent += content;
                                     this.outputChannel.appendLine(`[DEBUG] webviewProtocol status: ${this.webviewProtocol ? 'available' : 'NULL'}`);
                                     
-                                    if (!isStreaming) {
+                                    if (!streamingState.isStreaming) {
+                                        streamingState.isStreaming = true;
                                         isStreaming = true;
                                         if (this.webviewProtocol) {
                                             this.outputChannel.appendLine(`[DEBUG] Sending message/add for assistant`);
@@ -452,7 +502,8 @@ export class ExtensionMessageHandler {
                                     if (metadata.messageId) messageId = metadata.messageId;
                                     if (metadata.totalCost !== undefined) totalCost = metadata.totalCost;
                                     if (metadata.apiKeySource) apiKeySource = metadata.apiKeySource;
-                                });
+                                }, streamingState);
+                                isStreaming = streamingState.isStreaming;
                             } catch (error) {
                                 this.outputChannel.appendLine(`[DEBUG] Failed to parse JSON line: ${line}`);
                             }
@@ -466,7 +517,7 @@ export class ExtensionMessageHandler {
                     if (jsonBuffer.trim()) {
                         try {
                             const json = JSON.parse(jsonBuffer);
-                            this.processClaudeStreamMessage(json, () => {}, () => {});
+                            this.processClaudeStreamMessage(json, () => {}, () => {}, { isStreaming: true });
                         } catch (error) {
                             this.outputChannel.appendLine(`[DEBUG] Failed to parse remaining buffer: ${jsonBuffer}`);
                         }
@@ -516,8 +567,10 @@ export class ExtensionMessageHandler {
                         this.outputChannel.appendLine(`[WARNING] No data was received from Claude`);
                     }
                 }
-                // Always send completion message
+                // Always send completion message and set processing to false
                 this.webviewProtocol?.post('chat/messageComplete', {});
+                this.webviewProtocol?.post('status/processing', false);
+                this.outputChannel.appendLine(`[DEBUG] Set processing status to false`);
             });
             
         } catch (error: any) {
@@ -525,6 +578,8 @@ export class ExtensionMessageHandler {
             this.webviewProtocol?.post('error/show', {
                 message: `Failed to send message: ${error.message || error}`
             });
+            // Set processing to false on error
+            this.webviewProtocol?.post('status/processing', false);
         }
     }
     
@@ -536,7 +591,8 @@ export class ExtensionMessageHandler {
             messageId?: string;
             totalCost?: number;
             apiKeySource?: string;
-        }) => void
+        }) => void,
+        streamingState: { isStreaming: boolean }
     ) {
         // Handle different message types from Claude Code SDK stream-json format
         this.logger.debug('ExtensionMessageHandler', 'Processing stream JSON', { type: json.type });
@@ -560,6 +616,17 @@ export class ExtensionMessageHandler {
                 
             case 'assistant':
                 this.outputChannel.appendLine(`[JSON] Assistant message received`);
+                
+                // Ensure we have an assistant message to attach tools/thinking to
+                if (!streamingState.isStreaming && json.message?.content) {
+                    streamingState.isStreaming = true;
+                    this.outputChannel.appendLine(`[DEBUG] Creating initial assistant message`);
+                    this.webviewProtocol?.post('message/add', {
+                        role: 'assistant',
+                        content: ''
+                    });
+                }
+                
                 // Handle assistant messages from SDK format
                 if (json.message?.content) {
                     if (Array.isArray(json.message.content)) {
@@ -569,6 +636,22 @@ export class ExtensionMessageHandler {
                                 this.outputChannel.appendLine(`[JSON] Text content: ${block.text.substring(0, 50)}...`);
                                 this.outputChannel.appendLine(`[DEBUG] Calling onContent callback with text`);
                                 onContent(block.text);
+                            } else if (block.type === 'thinking' && block.thinking) {
+                                this.outputChannel.appendLine(`[JSON] Thinking content: ${block.thinking.substring(0, 50)}...`);
+                                // Send thinking update to UI
+                                this.webviewProtocol?.post('message/thinking', {
+                                    content: block.thinking,
+                                    isActive: true
+                                });
+                            } else if (block.type === 'tool_use') {
+                                this.outputChannel.appendLine(`[JSON] Tool use: ${block.name} with id: ${block.id}`);
+                                // Send tool use update to UI
+                                this.webviewProtocol?.post('message/toolUse', {
+                                    toolName: block.name,
+                                    toolId: block.id,
+                                    input: block.input,
+                                    status: 'calling'
+                                });
                             }
                         }
                     } else if (typeof json.message.content === 'string') {
@@ -582,8 +665,22 @@ export class ExtensionMessageHandler {
                 break;
                 
             case 'user':
-                // User messages - we already show these
+                // User messages - check for tool results
                 this.outputChannel.appendLine(`[JSON] User message`);
+                if (json.message?.content && Array.isArray(json.message.content)) {
+                    for (const block of json.message.content) {
+                        if (block.type === 'tool_result' && block.tool_use_id) {
+                            this.outputChannel.appendLine(`[JSON] Tool result for: ${block.tool_use_id}`);
+                            // Send tool result update to UI
+                            this.webviewProtocol?.post('message/toolResult', {
+                                toolId: block.tool_use_id,
+                                result: block.content || block.text,
+                                isError: block.is_error,
+                                status: 'complete'
+                            });
+                        }
+                    }
+                }
                 break;
                 
             case 'result':
@@ -607,6 +704,49 @@ export class ExtensionMessageHandler {
             default:
                 this.outputChannel.appendLine(`[JSON] Unknown type: ${json.type}`);
                 this.logger.debug('ExtensionMessageHandler', 'Unknown message type', { type: json.type, json });
+        }
+    }
+
+    /**
+     * Check if a tool requires permission
+     */
+    private toolNeedsPermission(toolName: string): boolean {
+        // Tools that typically require permission
+        const permissionRequiredTools = [
+            'Bash',
+            'Write',
+            'Edit',
+            'MultiEdit',
+            'git',
+            'npm',
+            'yarn'
+        ];
+        
+        return permissionRequiredTools.includes(toolName);
+    }
+
+    /**
+     * Handle permission response from UI
+     */
+    private handlePermissionResponse(data: {
+        toolId: string;
+        approved: boolean;
+        toolName: string;
+    }): void {
+        this.outputChannel.appendLine(`[Permission] User ${data.approved ? 'APPROVED' : 'DENIED'} ${data.toolName} (${data.toolId})`);
+        
+        // If Claude is waiting for permission input, send the response
+        if (this.currentClaudeProcess && this.currentClaudeProcess.stdin) {
+            const response = data.approved ? 'y\n' : 'n\n';
+            this.currentClaudeProcess.stdin.write(response);
+            this.outputChannel.appendLine(`[Permission] Sent response to Claude: ${response.trim()}`);
+        }
+        
+        // If we have a pending promise for this permission, resolve it
+        const resolver = this.pendingPermissionResponses.get(data.toolId);
+        if (resolver) {
+            resolver(data.approved ? 'approved' : 'denied');
+            this.pendingPermissionResponses.delete(data.toolId);
         }
     }
 
@@ -736,5 +876,39 @@ export class ExtensionMessageHandler {
             this.logger.error('ExtensionMessageHandler', 'Stream processing error', error as Error);
             throw error;
         }
+    }
+
+    /**
+     * Execute a slash command in a terminal
+     */
+    private executeSlashCommand(command: string): void {
+        this.outputChannel.appendLine(`\n[Slash Command] Executing: /${command}`);
+        
+        // Build command arguments
+        const args = [`/${command}`];
+        
+        // Add session resume if we have a current session
+        if (this.currentSessionId) {
+            args.push('--resume', this.currentSessionId);
+            this.outputChannel.appendLine(`[Slash Command] Resuming session: ${this.currentSessionId}`);
+        }
+        
+        // Create terminal with the claude command
+        const terminal = vscode.window.createTerminal(`Claude /${command}`);
+        terminal.sendText(`claude ${args.join(' ')}`);
+        terminal.show();
+        
+        // Show info message
+        vscode.window.showInformationMessage(
+            `Executing /${command} command in terminal. Check the terminal output and return when ready.`,
+            'OK'
+        );
+        
+        // Send message to UI about terminal
+        this.webviewProtocol?.post('terminal/opened', {
+            message: `Executing /${command} command in terminal. Check the terminal output and return when ready.`
+        });
+        
+        this.outputChannel.appendLine(`[Slash Command] Terminal opened for /${command}`);
     }
 }

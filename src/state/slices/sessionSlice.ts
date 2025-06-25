@@ -138,11 +138,7 @@ const sessionSlice = createSlice({
     messageAdded: (state, action: PayloadAction<{ role: 'user' | 'assistant'; content: string }>) => {
       console.log('[sessionSlice] messageAdded called with:', action.payload);
       
-      // Don't add empty messages
-      if (!action.payload.content && action.payload.role === 'assistant') {
-        console.log('[sessionSlice] Skipping empty assistant message');
-        return;
-      }
+      // We'll check for empty duplicates after ensuring we have a session
       
       // Ensure we have a current session
       if (!state.currentSessionId) {
@@ -178,6 +174,16 @@ const sessionSlice = createSlice({
             console.warn('[sessionSlice] Ignoring duplicate user message:', action.payload.content);
             return; // Skip duplicate
           }
+        }
+        
+        // Check for empty assistant message duplicates
+        if (!action.payload.content && action.payload.role === 'assistant') {
+          const lastMessage = session.messages[session.messages.length - 1];
+          if (lastMessage?.role === 'assistant' && !lastMessage.content) {
+            console.log('[sessionSlice] Skipping duplicate empty assistant message');
+            return;
+          }
+          console.log('[sessionSlice] Adding empty assistant message as placeholder for tools');
         }
         
         const message: ClaudeMessage = {
@@ -257,6 +263,97 @@ const sessionSlice = createSlice({
       if (state.currentSessionId && state.sessions[state.currentSessionId]) {
         state.sessions[state.currentSessionId].updatedAt = Date.now();
       }
+    },
+    
+    thinkingUpdated: (state, action: PayloadAction<{ content: string; isActive: boolean }>) => {
+      console.log('[sessionSlice] thinkingUpdated:', action.payload);
+      if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
+      
+      const session = state.sessions[state.currentSessionId];
+      const messages = session.messages;
+      
+      // Find the last assistant message
+      let lastAssistantIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant') {
+          lastAssistantIndex = i;
+          break;
+        }
+      }
+      if (lastAssistantIndex >= 0) {
+        messages[lastAssistantIndex].thinking = action.payload.content;
+      }
+    },
+    
+    toolUseAdded: (state, action: PayloadAction<{
+      toolName: string;
+      toolId: string;
+      input: any;
+      status: string;
+    }>) => {
+      console.log('[sessionSlice] toolUseAdded:', action.payload);
+      if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
+      
+      const session = state.sessions[state.currentSessionId];
+      const messages = session.messages;
+      
+      // Find the last assistant message
+      let lastAssistantIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant') {
+          lastAssistantIndex = i;
+          break;
+        }
+      }
+      if (lastAssistantIndex >= 0) {
+        const message = messages[lastAssistantIndex];
+        if (!message.toolUses) {
+          message.toolUses = [];
+        }
+        
+        // Add the tool use
+        message.toolUses.push({
+          toolName: action.payload.toolName,
+          toolId: action.payload.toolId,
+          input: action.payload.input
+        });
+        
+        // Update activeSession to trigger re-render
+        if (state.activeSession?.id === state.currentSessionId) {
+          state.activeSession.messages = [...session.messages];
+        }
+      }
+    },
+    
+    toolResultAdded: (state, action: PayloadAction<{
+      toolId: string;
+      result: string;
+      isError?: boolean;
+      status: string;
+    }>) => {
+      console.log('[sessionSlice] toolResultAdded:', action.payload);
+      if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
+      
+      const session = state.sessions[state.currentSessionId];
+      const messages = session.messages;
+      
+      // Find the message with this tool ID
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message.toolUses) {
+          const toolUse = message.toolUses.find(t => t.toolId === action.payload.toolId);
+          if (toolUse) {
+            toolUse.result = action.payload.result;
+            toolUse.isError = action.payload.isError;
+            
+            // Update activeSession to trigger re-render
+            if (state.activeSession?.id === state.currentSessionId) {
+              state.activeSession.messages = [...session.messages];
+            }
+            break;
+          }
+        }
+      }
     }
   },
   extraReducers: (builder) => {
@@ -277,7 +374,10 @@ export const {
   loadSessions,
   messageAdded,
   messageUpdated,
-  messageCompleted
+  messageCompleted,
+  thinkingUpdated,
+  toolUseAdded,
+  toolResultAdded
 } = sessionSlice.actions;
 
 // Selectors

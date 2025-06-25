@@ -79,17 +79,20 @@ build: compile build-webview
 	@echo "$(GREEN)✓ Build complete$(NC)"
 
 ## Create VSIX package
-package: build
+package:
 	@echo "$(BLUE)Creating VSIX package...$(NC)"
 	@rm -f *.vsix
 	@npx vsce package --no-dependencies
 	@echo "$(GREEN)✓ Package created: $(VSIX_FILE)$(NC)"
 	@ls -lh $(VSIX_FILE)
 
+## Create VSIX package with explicit build
+package-with-build: build package
+	@echo "$(GREEN)✓ Package created with explicit build$(NC)"
+
 ## Quick package (no install)
 quick-package:
 	@echo "$(YELLOW)Quick packaging (no dependency install)...$(NC)"
-	@make build
 	@make package
 
 ## Clean build artifacts
@@ -138,7 +141,8 @@ install-local: package
 	@echo "$(GREEN)✓ Extension installed$(NC)"
 
 ## Reinstall the extension (uninstall + install)
-reinstall: package
+reinstall:
+	@make package
 	@echo "$(BLUE)Uninstalling current extension...$(NC)"
 	@code --uninstall-extension $(EXTENSION_ID) || echo "$(YELLOW)Extension not currently installed$(NC)"
 	@echo "$(BLUE)Installing new extension...$(NC)"
@@ -149,8 +153,7 @@ reinstall: package
 ## Quick reinstall (no npm install)
 quick-reinstall:
 	@echo "$(YELLOW)Quick reinstall (no dependency install)...$(NC)"
-	@make build
-	@echo "$(BLUE)Creating VSIX package...$(NC)"
+	@echo "$(BLUE)Creating VSIX package (vsce will build automatically)...$(NC)"
 	@rm -f *.vsix
 	@npx vsce package --no-dependencies
 	@echo "$(GREEN)✓ Package created: $(VSIX_FILE)$(NC)"

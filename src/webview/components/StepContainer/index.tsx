@@ -4,7 +4,8 @@ import { vscBackground } from '../styled';
 import { getFontSize } from '../../util';
 import { StyledMarkdownPreview } from '../StyledMarkdownPreview';
 import { ResponseActions } from './ResponseActions';
-import { ThinkingIndicator } from './ThinkingIndicator';
+import { ThinkingIndicator } from '../ThinkingIndicator';
+import { ToolUseDisplay } from '../ToolUseDisplay';
 
 interface StepContainerProps {
     content: string;
@@ -14,6 +15,14 @@ interface StepContainerProps {
     index: number;
     onDelete?: () => void;
     onContinue?: () => void;
+    thinking?: string;
+    toolUses?: Array<{
+        toolName: string;
+        toolId: string;
+        input: any;
+        result?: string;
+        isError?: boolean;
+    }>;
 }
 
 // Exact styling from GUI
@@ -41,7 +50,9 @@ export const StepContainer: React.FC<StepContainerProps> = ({
     isStreaming = false,
     index,
     onDelete,
-    onContinue
+    onContinue,
+    thinking,
+    toolUses
 }) => {
     console.log(`[StepContainer] Rendering message ${index}:`, { role, content: content?.substring(0, 50), contentLength: content?.length });
     const [isTruncated, setIsTruncated] = useState(false);
@@ -76,12 +87,35 @@ export const StepContainer: React.FC<StepContainerProps> = ({
                     <UserMessageDiv>{content}</UserMessageDiv>
                 ) : (
                     <>
+                        {/* Show thinking if available */}
+                        {thinking && (
+                            <ThinkingIndicator 
+                                content={thinking}
+                                isExpanded={true}
+                            />
+                        )}
+                        
+                        {/* Show tool uses if available */}
+                        {toolUses && toolUses.map((tool, toolIndex) => (
+                            <ToolUseDisplay
+                                key={tool.toolId}
+                                toolName={tool.toolName}
+                                input={tool.input}
+                                result={tool.result}
+                                isError={tool.isError}
+                                isExpanded={false}
+                            />
+                        ))}
+                        
+                        {/* Show content */}
                         <StyledMarkdownPreview
                             source={content}
                             isRenderingInStepContainer
                             itemIndex={index}
                         />
-                        {isLast && isStreaming && <ThinkingIndicator />}
+                        
+                        {/* Show thinking indicator for streaming */}
+                        {isLast && isStreaming && !thinking && <ThinkingIndicator />}
                     </>
                 )}
             </ContentDiv>

@@ -11,7 +11,8 @@ const initialState: UIState = {
   isClaudeRunning: false,
   showThinking: false,
   showCost: true,
-  expandedTools: {}
+  expandedTools: {},
+  permissionRequest: null
 };
 
 const uiSlice = createSlice({
@@ -56,10 +57,26 @@ const uiSlice = createSlice({
       state.expandedTools = {};
     },
     
+    showPermissionRequest: (state, action: PayloadAction<{
+      toolName: string;
+      toolId: string;
+      toolInput: any;
+    }>) => {
+      state.permissionRequest = action.payload;
+    },
+    
+    clearPermissionRequest: (state) => {
+      state.permissionRequest = null;
+    },
+    
     resetUI: () => initialState
   },
   extraReducers: (builder) => {
     builder.addCase(resetAllState, () => initialState);
+    // Handle the action from the webview dispatcher
+    builder.addCase('ui/showPermissionRequest', (state, action: any) => {
+      state.permissionRequest = action.payload;
+    });
   }
 });
 
@@ -71,6 +88,8 @@ export const {
   toggleToolExpanded,
   setToolExpanded,
   clearExpandedTools,
+  showPermissionRequest,
+  clearPermissionRequest,
   resetUI
 } = uiSlice.actions;
 
