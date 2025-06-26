@@ -21,4 +21,4 @@ This flag tells Claude to skip all permission prompts and automatically grant ac
 The flag is safe to use in this context because:
 - The extension is running in a controlled environment
 - Users explicitly installed the extension and expect it to have file system access
-- This matches the behavior of the original Claude Code Chat extension
+- This matches the behavior of the original Claude Code GUI extension

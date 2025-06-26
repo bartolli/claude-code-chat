@@ -1,4 +1,4 @@
-# Claude Code Chat Extension - Build Automation
+# Claude Code GUI Extension - Build Automation
 # Usage: make [target]
 
 # Variables
@@ -24,7 +24,7 @@ NC = \033[0m # No Color
 
 ## Help command
 help:
-	@echo "$(BLUE)Claude Code Chat Extension - Build Commands$(NC)"
+	@echo "$(BLUE)Claude Code GUI Extension - Build Commands$(NC)"
 	@echo ""
 	@echo "$(GREEN)Main Commands:$(NC)"
 	@echo "  make install        - Install dependencies"

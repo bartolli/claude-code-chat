@@ -50,7 +50,7 @@ export class WebviewManager {
         font-src ${cspSource};
         connect-src ${cspSource};
     ">
-    <title>Claude Code Chat</title>
+    <title>Claude Code GUI</title>
     <style nonce="${nonce}">
         body {
             margin: 0;
@@ -105,7 +105,7 @@ export class WebviewManager {
     <div id="root">
         <div class="loading-container" id="loading">
             <div class="loading-content">
-                <div class="loading-title">Claude Code Chat</div>
+                <div class="loading-title">Claude Code GUI</div>
                 <div class="loading-subtitle">Initializing interface...</div>
             </div>
         </div>

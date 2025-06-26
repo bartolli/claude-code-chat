@@ -1,7 +1,7 @@
 # UI Styling Implementation Guide - Based on Continue GUI
 
 ## OBJECTIVE
-Implement UI styling improvements in the Claude Code Chat extension to match the polished design of the Continue GUI, which is located in the `gui/` directory of the Continue extension.
+Implement UI styling improvements in the Claude Code GUI extension to match the polished design of the Continue GUI, which is located in the `gui/` directory of the Continue extension.
 
 ## KEY FEATURES TO IMPLEMENT
 

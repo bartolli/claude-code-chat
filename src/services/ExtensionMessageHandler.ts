@@ -34,7 +34,7 @@ export class ExtensionMessageHandler {
         try {
             this.outputChannel = serviceContainer.get('OutputChannel') as vscode.OutputChannel;
         } catch {
-            this.outputChannel = vscode.window.createOutputChannel('Claude Code Chat');
+            this.outputChannel = vscode.window.createOutputChannel('Claude Code GUI');
         }
     }
 

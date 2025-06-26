@@ -1,7 +1,7 @@
 {
   "name": "claude-code-chat-modern",
-  "displayName": "Claude Code Chat - Modern UI",
-  "description": "Beautiful Modern Claude Code Chat Interface with React UI for VS Code",
+  "displayName": "Claude Code GUI - Modern UI",
+  "description": "Beautiful Modern Claude Code GUI Interface with React UI for VS Code",
   "version": "0.2.0",
   "publisher": "claude-extension-dev",
   "author": "Claude Extension Development Team",
@@ -54,8 +54,8 @@
     "commands": [
       {
         "command": "claude-code-chat-modern.openChat",
-        "title": "Open Claude Code Chat",
-        "category": "Claude Code Chat",
+        "title": "Open Claude Code GUI",
+        "category": "Claude Code GUI",
         "icon": "icon.png"
       }
     ],
@@ -130,10 +130,10 @@
       "claude-code-chat-modern": [
         {
           "id": "claude-code-chat-modern.chat",
-          "name": "Claude Code Chat",
+          "name": "Claude Code GUI",
           "when": "true",
           "icon": "icon.png",
-          "contextualTitle": "Claude Code Chat"
+          "contextualTitle": "Claude Code GUI"
         }
       ]
     },
@@ -141,13 +141,13 @@
       "activitybar": [
         {
           "id": "claude-code-chat-modern",
-          "title": "Claude Code Chat",
+          "title": "Claude Code GUI",
           "icon": "icon.png"
         }
       ]
     },
     "configuration": {
-      "title": "Claude Code Chat",
+      "title": "Claude Code GUI",
       "properties": {
         "claudeCodeChatModern.wsl.enabled": {
           "type": "boolean",

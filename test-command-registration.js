@@ -11,7 +11,7 @@
             cmd.includes('claude-code-chat-modern')
         );
         
-        console.log('Claude Code Chat Modern Commands:', claudeCommands);
+        console.log('Claude Code GUI Modern Commands:', claudeCommands);
         
         // Check if the main command is registered
         const mainCommand = 'claude-code-chat-modern.openChat';

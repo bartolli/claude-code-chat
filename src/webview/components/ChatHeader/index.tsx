@@ -50,7 +50,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     return (
         <HeaderContainer>
             <LeftSection>
-                <Title>Claude Code Chat</Title>
+                <Title>Claude Code GUI</Title>
                 <ModelSelector
                     models={models}
                     selectedModelId={selectedModelId}

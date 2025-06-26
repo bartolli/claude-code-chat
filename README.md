@@ -1,4 +1,4 @@
-# 🚀 Claude Code Chat - Beautiful Claude Code Chat Interface for VS Code
+# 🚀 Claude Code GUI - Beautiful Claude Code GUI Interface for VS Code
 
 [![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-blue?style=for-the-badge&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=andrepimenta.claude-code-chat)
 [![Claude Code](https://img.shields.io/badge/Powered%20by-Claude%20Code-orange?style=for-the-badge)](https://claude.ai/code)
@@ -12,7 +12,7 @@ Ditch the command line and experience Claude Code like never before. This extens
 
 ---
 
-## ✨ **Why Choose Claude Code Chat?**
+## ✨ **Why Choose Claude Code GUI?**
 
 🖥️ **No Terminal Required** - Beautiful chat interface replaces command-line interactions  
 ⏪ **Restore Checkpoints** - Undo changes and restore code to any previous state  
@@ -26,14 +26,14 @@ Ditch the command line and experience Claude Code like never before. This extens
 ⚡ **Slash Commands** - Type "/" for instant access to all Claude Code commands  
 🐧 **WSL Support** - Full Windows Subsystem for Linux integration and compatibility
 
-![Claude Code Chat Cut](https://github.com/user-attachments/assets/d4ded28f-a4ed-4862-9766-c1ff89947775)
+![Claude Code GUI Cut](https://github.com/user-attachments/assets/d4ded28f-a4ed-4862-9766-c1ff89947775)
 
 
 ---
 
 ## 🔐 **Authentication Options**
 
-Claude Code Chat supports two authentication methods:
+Claude Code GUI supports two authentication methods:
 
 ### 1. **API Key Authentication** (Programmatic Access)
 - Create an API key in the [Anthropic Console](https://console.anthropic.com/)
@@ -126,7 +126,7 @@ The extension automatically detects which method to use based on your environmen
    - Download the `.vsix` file from releases
    - Run `code --install-extension claude-code-chat-x.x.x.vsix`
 
-3. **Open Claude Code Chat**
+3. **Open Claude Code GUI**
    - Press `Ctrl+Shift+C` (or `Cmd+Shift+C` on Mac)
    - Or click the Claude icon in your status bar
    - Or use Command Palette: `Claude Code: Open Chat`
@@ -201,7 +201,7 @@ If you want to revert these changes, just click "Restore Checkpoint" to go back 
 ### Keyboard Shortcuts
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Shift+C` | Open Claude Code Chat |
+| `Ctrl+Shift+C` | Open Claude Code GUI |
 | `Enter` | Send message |
 | `@` | Open file picker |
 | `/` | Open slash commands modal |
@@ -210,12 +210,12 @@ If you want to revert these changes, just click "Restore Checkpoint" to go back 
 If you're using Claude Code through WSL (Windows Subsystem for Linux), you can configure the extension to use WSL:
 
 1. Open VS Code Settings (`Ctrl+,` or `Cmd+,`)
-2. Search for "Claude Code Chat"
+2. Search for "Claude Code GUI"
 3. Configure these settings:
-   - **Claude Code Chat: WSL Enabled** - Enable WSL integration
-   - **Claude Code Chat: WSL Distro** - Your WSL distribution name (e.g., `Ubuntu`, `Debian`)
-   - **Claude Code Chat: WSL Node Path** - Path to Node.js in WSL (default: `/usr/bin/node`)
-   - **Claude Code Chat: WSL Claude Path** - Path to Claude in WSL (default: `/usr/local/bin/claude`)
+   - **Claude Code GUI: WSL Enabled** - Enable WSL integration
+   - **Claude Code GUI: WSL Distro** - Your WSL distribution name (e.g., `Ubuntu`, `Debian`)
+   - **Claude Code GUI: WSL Node Path** - Path to Node.js in WSL (default: `/usr/bin/node`)
+   - **Claude Code GUI: WSL Claude Path** - Path to Claude in WSL (default: `/usr/local/bin/claude`)
 
 Example configuration in `settings.json`:
 ```json
@@ -253,7 +253,7 @@ Example configuration in `settings.json`:
 ## 🔧 **Advanced Features**
 
 ### 🛠️ **Tool Integration**
-Claude Code Chat provides full access to all Claude Code tools:
+Claude Code GUI provides full access to all Claude Code tools:
 - **Bash** - Execute shell commands
 - **File Operations** - Read, write, and edit files
 - **Search** - Grep and glob pattern matching

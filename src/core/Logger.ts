@@ -27,7 +27,7 @@ export class Logger {
   private listeners: ((entry: LogEntry) => void)[] = [];
 
   private constructor(outputChannel?: vscode.OutputChannel) {
-    this.outputChannel = outputChannel || vscode.window.createOutputChannel('Claude Code Chat');
+    this.outputChannel = outputChannel || vscode.window.createOutputChannel('Claude Code GUI');
   }
 
   public static getInstance(outputChannel?: vscode.OutputChannel): Logger {

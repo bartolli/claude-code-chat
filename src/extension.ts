@@ -7,11 +7,11 @@ import * as fs from 'fs';
 const exec = util.promisify(cp.exec);
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('STEP3: Claude Code Chat extension is being activated!');
+    console.log('STEP3: Claude Code GUI extension is being activated!');
     
     // Create output channel for debugging
-    const outputChannel = vscode.window.createOutputChannel('Claude Code Chat');
-    outputChannel.appendLine('[Activation] Claude Code Chat extension is being activated...');
+    const outputChannel = vscode.window.createOutputChannel('Claude Code GUI');
+    outputChannel.appendLine('[Activation] Claude Code GUI extension is being activated...');
     
     try {
         // Try to load ServiceContainer with error handling
@@ -65,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
         
         // If we have logger, use it
         if (logger) {
-            logger.info('Extension', 'Claude Code Chat extension activated');
+            logger.info('Extension', 'Claude Code GUI extension activated');
         }
         
     } catch (error) {
@@ -114,7 +114,7 @@ class ClaudeChatProvider {
 
         this._panel = vscode.window.createWebviewPanel(
             'claudeChat',
-            'Claude Code Chat',
+            'Claude Code GUI',
             column,
             {
                 enableScripts: true,
@@ -193,10 +193,10 @@ class ClaudeChatProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Claude Code Chat</title>
+            <title>Claude Code GUI</title>
         </head>
         <body>
-            <h1>Claude Code Chat - Step 3</h1>
+            <h1>Claude Code GUI - Step 3</h1>
             <p>ServiceContainer issue detected. Using fallback UI.</p>
             <p>Check the console for error details.</p>
         </body>
