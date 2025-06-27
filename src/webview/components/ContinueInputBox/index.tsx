@@ -18,6 +18,9 @@ interface ContinueInputBoxProps {
     disabled?: boolean;
     messenger?: IIdeMessenger;
     isStreaming?: boolean;
+    models?: Array<{ id: string; name: string }>;
+    selectedModelId?: string;
+    onModelChange?: (modelId: string) => void;
 }
 
 export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
@@ -25,7 +28,10 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
     placeholder = "Ask Claude anything...",
     disabled = false,
     messenger,
-    isStreaming = false
+    isStreaming = false,
+    models,
+    selectedModelId,
+    onModelChange
 }) => {
     const [content, setContent] = useState('');
     const [isFocused, setIsFocused] = useState(false);
@@ -68,6 +74,9 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
                     tokenCount={estimateTokens(content)}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
+                    models={models}
+                    selectedModelId={selectedModelId}
+                    onModelChange={onModelChange}
                 />
             </GradientBorder>
         </Container>

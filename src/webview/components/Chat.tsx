@@ -19,7 +19,7 @@ import { RootState } from '../../state/store';
 const ChatContainer = styled.div`
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: 100vh;
     position: relative;
 `;
 
@@ -29,6 +29,9 @@ const StepsDiv = styled.div`
     flex: 1;
     overflow-y: auto;
     padding-top: 8px;
+    padding-bottom: 16px;
+    display: flex;
+    flex-direction: column-reverse;
     
     & > * {
         position: relative;
@@ -40,9 +43,12 @@ const StepsDiv = styled.div`
 `;
 
 const InputArea = styled.div`
-    position: relative;
-    padding: 16px;
-    padding-top: 0;
+    position: sticky;
+    bottom: 0;
+    background-color: ${varWithFallback('editor-background')};
+    padding: 12px 16px;
+    border-top: 1px solid ${varWithFallback('border')};
+    z-index: 10;
 `;
 
 const MessageContainer = styled.div`
@@ -89,7 +95,8 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
     // Auto scroll to bottom when new messages arrive or waiting indicator appears
     useEffect(() => {
         if (stepsDivRef.current) {
-            stepsDivRef.current.scrollTop = stepsDivRef.current.scrollHeight;
+            // For column-reverse, scrollTop 0 is the bottom
+            stepsDivRef.current.scrollTop = 0;
         }
     }, [messages, showWaitingIndicator]);
 
@@ -152,41 +159,47 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                 onAddModel={() => console.log('Add model')}
             />
             <StepsDiv ref={stepsDivRef} className="thin-scrollbar">
-                {messages.length === 0 ? (
-                    <EmptyChatBody showOnboardingCard={false} />
-                ) : (
-                    messages.map((msg, index) => (
-                        <MessageContainer key={index}>
-                            <StepContainer
-                                content={msg.content}
-                                role={msg.role}
-                                index={index}
-                                isLast={index === messages.length - 1}
-                                onDelete={() => console.log('Delete message', index)}
-                                onContinue={() => console.log('Continue generation')}
-                                thinking={msg.thinking}
-                                toolUses={msg.toolUses}
-                            />
-                        </MessageContainer>
-                    ))
-                )}
-                
-                {/* Show waiting indicator when Claude is processing */}
-                {showWaitingIndicator && (
-                    <WaitingIndicator />
-                )}
-                
-                {/* Show permission prompt if there's a request */}
-                {permissionRequest && (
-                    <MessageContainer>
-                        <PermissionPrompt
-                            toolName={permissionRequest.toolName}
-                            toolInput={permissionRequest.toolInput}
-                            onApprove={handlePermissionApprove}
-                            onDeny={handlePermissionDeny}
-                        />
-                    </MessageContainer>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {messages.length === 0 ? (
+                        <EmptyChatBody showOnboardingCard={false} />
+                    ) : (
+                        <>
+                            {messages.map((msg, index) => (
+                                <MessageContainer key={index}>
+                                    <StepContainer
+                                        content={msg.content}
+                                        role={msg.role}
+                                        index={index}
+                                        isLast={index === messages.length - 1}
+                                        onDelete={() => console.log('Delete message', index)}
+                                        onContinue={() => console.log('Continue generation')}
+                                        thinking={msg.thinking}
+                                        toolUses={msg.toolUses}
+                                    />
+                                </MessageContainer>
+                            ))}
+                            
+                            {/* Show waiting indicator when Claude is processing */}
+                            {showWaitingIndicator && (
+                                <MessageContainer>
+                                    <WaitingIndicator />
+                                </MessageContainer>
+                            )}
+                            
+                            {/* Show permission prompt if there's a request */}
+                            {permissionRequest && (
+                                <MessageContainer>
+                                    <PermissionPrompt
+                                        toolName={permissionRequest.toolName}
+                                        toolInput={permissionRequest.toolInput}
+                                        onApprove={handlePermissionApprove}
+                                        onDeny={handlePermissionDeny}
+                                    />
+                                </MessageContainer>
+                            )}
+                        </>
+                    )}
+                </div>
             </StepsDiv>
             <InputArea>
                 <ContinueInputBox
@@ -195,6 +208,9 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                     disabled={isProcessing}
                     messenger={messenger}
                     isStreaming={showWaitingIndicator}
+                    models={models}
+                    selectedModelId={selectedModelId}
+                    onModelChange={handleModelChange}
                 />
             </InputArea>
         </ChatContainer>

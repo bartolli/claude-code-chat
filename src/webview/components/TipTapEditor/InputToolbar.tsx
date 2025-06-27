@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { Button } from '../Button';
 import { lightGray, defaultBorderRadius } from '../styled';
+import { ModelSelector } from './ModelSelector';
 
 const ToolbarContainer = styled.div`
     display: flex;
@@ -62,17 +63,30 @@ interface InputToolbarProps {
     onAddContext?: () => void;
     canSubmit?: boolean;
     tokenCount?: number;
+    models?: Array<{ id: string; name: string }>;
+    selectedModelId?: string;
+    onModelChange?: (modelId: string) => void;
 }
 
 export const InputToolbar: React.FC<InputToolbarProps> = ({
     onSubmit,
     onAddContext,
     canSubmit = true,
-    tokenCount = 0
+    tokenCount = 0,
+    models = [],
+    selectedModelId = '',
+    onModelChange
 }) => {
     return (
         <ToolbarContainer>
             <LeftSection>
+                {models.length > 0 && onModelChange && (
+                    <ModelSelector
+                        models={models}
+                        selectedModelId={selectedModelId}
+                        onModelChange={onModelChange}
+                    />
+                )}
                 <IconButton 
                     onClick={onAddContext}
                     title="Add context (@)"

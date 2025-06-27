@@ -88,6 +88,9 @@ interface TipTapEditorProps {
     tokenCount?: number;
     onFocus?: () => void;
     onBlur?: () => void;
+    models?: Array<{ id: string; name: string }>;
+    selectedModelId?: string;
+    onModelChange?: (modelId: string) => void;
 }
 
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({ 
@@ -99,7 +102,10 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     onAddContext,
     tokenCount = 0,
     onFocus,
-    onBlur
+    onBlur,
+    models,
+    selectedModelId,
+    onModelChange
 }) => {
     const [isFocused, setIsFocused] = React.useState(false);
 
@@ -272,6 +278,9 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
                 onAddContext={onAddContext}
                 canSubmit={editor ? editor.getText().trim().length > 0 && editable : false}
                 tokenCount={tokenCount}
+                models={models}
+                selectedModelId={selectedModelId}
+                onModelChange={onModelChange}
             />
         </EditorContainer>
     );
