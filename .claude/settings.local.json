@@ -26,5 +26,11 @@
     ],
     "deny": []
   },
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [
+    "time"
+  ],
+  "disabledMcpjsonServers": [
+    "exa"
+  ]
 }

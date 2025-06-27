@@ -1,0 +1,13 @@
+name: New MCP server
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: Time
+    command: /Users/bartolli/.pyenv/shims/uv
+    args:
+      - --directory
+      - Users/bartolli/Projects/mcp-servers/servers/src/time
+      - run
+      - mcp-server-time
+      - --local-timezone=America/New_York
+    env: {}

@@ -158,8 +158,25 @@ export const ToolUseDisplay: React.FC<ToolUseDisplayProps> = ({
   const handleToggle = () => setIsExpanded(!isExpanded);
   
   // Format input for display
-  const formatInput = (input: any): string => {
+  const formatInput = (input: any): React.ReactNode => {
     if (typeof input === 'string') return input;
+    
+    // Handle objects with {type: 'text', text: string} structure
+    if (input && typeof input === 'object' && input.type === 'text' && typeof input.text === 'string') {
+      return input.text;
+    }
+    
+    // Handle arrays of text objects
+    if (Array.isArray(input)) {
+      const textParts = input
+        .filter(item => item && typeof item === 'object' && item.type === 'text' && typeof item.text === 'string')
+        .map(item => item.text);
+      
+      if (textParts.length > 0) {
+        return textParts.join('\n');
+      }
+    }
+    
     try {
       return JSON.stringify(input, null, 2);
     } catch {
@@ -185,7 +202,7 @@ export const ToolUseDisplay: React.FC<ToolUseDisplayProps> = ({
         <ToolContent>
           {input && (
             <ToolInput>
-              <pre>{formatInput(input)}</pre>
+              <pre>{String(formatInput(input))}</pre>
             </ToolInput>
           )}
           

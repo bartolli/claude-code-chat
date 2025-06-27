@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useSelector } from 'react-redux';
 import {
@@ -124,12 +124,99 @@ const Separator = styled.span`
   font-size: 11px;
 `;
 
+const MCPSettingsSection = styled.div<{ isVisible: boolean }>`
+  max-height: ${props => props.isVisible ? '170px' : '0'};
+  opacity: ${props => props.isVisible ? 1 : 0};
+  overflow: hidden;
+  transition: all 0.3s ease-in-out;
+  margin-top: ${props => props.isVisible ? '8px' : '0'};
+  padding: ${props => props.isVisible ? '8px' : '0 8px'};
+  border-top: ${props => props.isVisible ? `1px solid ${vscCommandCenterInactiveBorder}` : 'none'};
+`;
+
+const MCPServerList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const MCPServerEntry = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: ${varWithFallback('list-hover')};
+  border-radius: 4px;
+  font-size: 11px;
+`;
+
+const MCPServerInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const MCPServerName = styled.span`
+  color: ${vscForeground};
+`;
+
+const MCPServerStats = styled.span`
+  color: ${lightGray};
+  font-size: 10px;
+`;
+
+const MCPActions = styled.div`
+  display: flex;
+  gap: 4px;
+`;
+
+const MCPActionButton = styled.button`
+  background: none;
+  border: none;
+  color: ${lightGray};
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: ${vscForeground};
+  }
+  
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+`;
+
+const AddServerButton = styled.button`
+  width: 100%;
+  padding: 6px;
+  margin-top: 8px;
+  background: none;
+  border: 1px dashed ${vscCommandCenterInactiveBorder};
+  border-radius: 4px;
+  color: ${lightGray};
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    border-color: ${vscForeground};
+    color: ${vscForeground};
+    background: rgba(255, 255, 255, 0.05);
+  }
+`;
+
 interface LumpProps {
   isMainInput?: boolean;
 }
 
 export const Lump: React.FC<LumpProps> = ({ isMainInput = true }) => {
   if (!isMainInput) return null;
+
+  // Local state
+  const [showMCPSettings, setShowMCPSettings] = useState(false);
 
   // Get data from Redux store
   const selectedModel = useSelector(selectSelectedModel);
@@ -242,7 +329,10 @@ export const Lump: React.FC<LumpProps> = ({ isMainInput = true }) => {
               <ToolbarLabel>Tools</ToolbarLabel>
             </ToolbarButton>
 
-            <ToolbarButton title="MCP">
+            <ToolbarButton 
+              title="MCP"
+              onClick={() => setShowMCPSettings(!showMCPSettings)}
+            >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
@@ -295,6 +385,55 @@ export const Lump: React.FC<LumpProps> = ({ isMainInput = true }) => {
             <StatusIndicator $status={status}>{statusText}</StatusIndicator>
           </ToolbarSection>
         </LumpToolbar>
+        
+        <MCPSettingsSection isVisible={showMCPSettings}>
+          <MCPServerList>
+            {/* Mock MCP server entries */}
+            <MCPServerEntry>
+              <MCPServerInfo>
+                <StatusIndicator $status="ready">●</StatusIndicator>
+                <MCPServerName>filesystem</MCPServerName>
+                <MCPServerStats>5 tools • 0 prompts</MCPServerStats>
+              </MCPServerInfo>
+              <MCPActions>
+                <MCPActionButton title="Edit">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                  </svg>
+                </MCPActionButton>
+                <MCPActionButton title="Refresh">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                </MCPActionButton>
+              </MCPActions>
+            </MCPServerEntry>
+            
+            <MCPServerEntry>
+              <MCPServerInfo>
+                <StatusIndicator $status="error">●</StatusIndicator>
+                <MCPServerName>github</MCPServerName>
+                <MCPServerStats>0 tools • 0 prompts</MCPServerStats>
+              </MCPServerInfo>
+              <MCPActions>
+                <MCPActionButton title="Edit">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                  </svg>
+                </MCPActionButton>
+                <MCPActionButton title="Refresh">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                </MCPActionButton>
+              </MCPActions>
+            </MCPServerEntry>
+          </MCPServerList>
+          
+          <AddServerButton onClick={() => console.log('Add MCP Server')}>
+            + Add MCP Servers
+          </AddServerButton>
+        </MCPSettingsSection>
       </LumpContent>
     </LumpDiv>
   );

@@ -1,0 +1,23 @@
+{
+    "mcpServers": {
+        "time": {
+            "command": "/Users/bartolli/.pyenv/shims/uv",
+            "args": [
+                "--directory",
+                "/Users/bartolli/Projects/mcp-servers/servers/src/time",
+                "run",
+                "mcp-server-time",
+                "--local-timezone=America/New_York"
+            ]
+        },
+        "exa": {
+            "command": "npx",
+            "args": [
+                "/Users/bartolli/Projects/mcp-servers/exa-mcp-server/build/index.js"
+            ],
+            "env": {
+                "EXA_API_KEY": "c20ba150-98e8-461f-8c29-cccba2ec52a5"
+            }
+        }
+    }
+}

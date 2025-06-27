@@ -105,8 +105,9 @@ export const StepContainer: React.FC<StepContainerProps> = ({
                                 toolName={tool.toolName}
                                 input={tool.input}
                                 result={tool.result}
+                                status={tool.result ? 'complete' : 'calling'}
                                 isError={tool.isError}
-                                isExpanded={false}
+                                defaultExpanded={false}
                             />
                         ))}
                         
