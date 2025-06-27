@@ -672,10 +672,23 @@ export class ExtensionMessageHandler {
                     for (const block of json.message.content) {
                         if (block.type === 'tool_result' && block.tool_use_id) {
                             this.outputChannel.appendLine(`[JSON] Tool result for: ${block.tool_use_id}`);
+                            
+                            // Extract text from MCP tool result content array
+                            let resultText = block.text;
+                            if (!resultText && Array.isArray(block.content)) {
+                                // Handle MCP tool results with content array
+                                const textContent = block.content.find((c: any) => c.type === 'text');
+                                resultText = textContent?.text || JSON.stringify(block.content);
+                                this.outputChannel.appendLine(`[JSON] Extracted MCP result text: ${resultText?.substring(0, 100)}...`);
+                            } else if (!resultText && block.content) {
+                                // Handle native tool results
+                                resultText = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                            }
+                            
                             // Send tool result update to UI
                             this.webviewProtocol?.post('message/toolResult', {
                                 toolId: block.tool_use_id,
-                                result: block.content || block.text,
+                                result: resultText,
                                 isError: block.is_error,
                                 status: 'complete'
                             });

@@ -3,6 +3,8 @@
  */
 
 import * as cp from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { getLogger } from '../core/Logger';
 import { ErrorBoundary, ApplicationError, ErrorCodes } from '../core/ErrorBoundary';
 import { Result, ok, err } from '../core/Result';
@@ -181,6 +183,16 @@ export class ClaudeProcessManager {
     
     if (options.dangerouslySkipPermissions) {
       args.push('--dangerously-skip-permissions');
+    }
+    
+    // Add MCP config flag if .mcp.json exists
+    const workingDir = options.cwd || process.cwd();
+    const mcpJsonPath = path.join(workingDir, '.mcp.json');
+    if (fs.existsSync(mcpJsonPath)) {
+      args.push('--mcp-config', '.mcp.json');
+      ClaudeProcessManager.logger.info('ClaudeProcessManager', 'Found .mcp.json, adding --mcp-config flag', {
+        path: mcpJsonPath
+      });
     }
     
     return args;
