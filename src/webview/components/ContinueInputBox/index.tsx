@@ -1,12 +1,15 @@
 import React, { useState, useRef } from 'react';
 import styled from 'styled-components';
 import { TipTapEditor } from '../TipTapEditor';
-import { InputToolbar } from '../TipTapEditor/InputToolbar';
+import { GradientBorder } from './GradientBorder';
 import { Editor } from '@tiptap/react';
 import { IIdeMessenger } from '../../../protocol/IdeMessenger';
 
-const InputContainer = styled.div`
-    width: 100%;
+const Container = styled.div`
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 0 8px;
 `;
 
 interface ContinueInputBoxProps {
@@ -14,15 +17,18 @@ interface ContinueInputBoxProps {
     placeholder?: string;
     disabled?: boolean;
     messenger?: IIdeMessenger;
+    isStreaming?: boolean;
 }
 
 export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
     onSubmit,
     placeholder = "Ask Claude anything...",
     disabled = false,
-    messenger
+    messenger,
+    isStreaming = false
 }) => {
     const [content, setContent] = useState('');
+    const [isFocused, setIsFocused] = useState(false);
     const editorRef = useRef<Editor | null>(null);
 
     const handleSubmit = (text?: string) => {
@@ -47,28 +53,23 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
     };
 
     return (
-        <InputContainer>
-            <TipTapEditor
-                placeholder={disabled ? "Processing..." : placeholder}
-                onSubmit={handleSubmit}
-                onUpdate={handleEditorUpdate}
-                autoFocus={!disabled}
-                editable={!disabled}
-            />
-            <InputToolbar
-                onSubmit={() => {
-                    if (editorRef.current && !disabled) {
-                        const text = editorRef.current.getText();
-                        handleSubmit(text);
-                    }
-                }}
-                onAddContext={() => {
-                    // TODO: Implement context menu
-                    console.log('Add context clicked');
-                }}
-                canSubmit={content.trim().length > 0 && !disabled}
-                tokenCount={estimateTokens(content)}
-            />
-        </InputContainer>
+        <Container>
+            <GradientBorder isStreaming={isStreaming} isFocused={isFocused}>
+                <TipTapEditor
+                    placeholder={disabled ? "Processing..." : placeholder}
+                    onSubmit={handleSubmit}
+                    onUpdate={handleEditorUpdate}
+                    autoFocus={!disabled}
+                    editable={!disabled}
+                    onAddContext={() => {
+                        // TODO: Implement context menu
+                        console.log('Add context clicked');
+                    }}
+                    tokenCount={estimateTokens(content)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                />
+            </GradientBorder>
+        </Container>
     );
 };

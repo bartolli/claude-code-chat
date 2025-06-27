@@ -194,6 +194,7 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                     placeholder="Ask Claude anything..."
                     disabled={isProcessing}
                     messenger={messenger}
+                    isStreaming={showWaitingIndicator}
                 />
             </InputArea>
         </ChatContainer>

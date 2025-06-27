@@ -13,20 +13,21 @@ import {
     vscCommandCenterInactiveBorder,
     vscCommandCenterActiveBorder 
 } from '../styled';
+import { InputToolbar } from './InputToolbar';
 import '../../styles/components/TipTapEditor.css';
 
 const EditorContainer = styled.div<{ isFocused: boolean }>`
     background-color: ${vscInputBackground};
-    border: 1px solid ${props => props.isFocused ? vscCommandCenterActiveBorder : vscCommandCenterInactiveBorder};
     border-radius: ${defaultBorderRadius};
-    padding: 12px;
+    display: flex;
+    flex-direction: column;
     min-height: 80px;
     max-height: 70vh;
-    overflow-y: auto;
-    transition: border-color 0.2s ease;
+    transition: all 0.15s ease-in-out;
     color: ${vscForeground};
     font-size: var(--vscode-font-size);
     font-family: var(--vscode-font-family);
+    opacity: ${props => props.isFocused ? 1 : 0.95};
 
     .ProseMirror {
         outline: none;
@@ -60,14 +61,21 @@ const EditorContainer = styled.div<{ isFocused: boolean }>`
     img {
         max-width: 96%;
         height: auto;
-        border: 1px solid transparent;
         border-radius: ${defaultBorderRadius};
         margin: 8px 0;
         
         &.ProseMirror-selectednode {
-            border-color: var(--vscode-focusBorder);
+            outline: 2px solid var(--vscode-focusBorder);
+            outline-offset: 2px;
         }
     }
+`;
+
+const EditorContentWrapper = styled.div`
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    padding-bottom: 4px;
 `;
 
 interface TipTapEditorProps {
@@ -76,6 +84,10 @@ interface TipTapEditorProps {
     onUpdate?: (editor: Editor) => void;
     autoFocus?: boolean;
     editable?: boolean;
+    onAddContext?: () => void;
+    tokenCount?: number;
+    onFocus?: () => void;
+    onBlur?: () => void;
 }
 
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({ 
@@ -83,7 +95,11 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     onSubmit,
     onUpdate,
     autoFocus = true,
-    editable = true
+    editable = true,
+    onAddContext,
+    tokenCount = 0,
+    onFocus,
+    onBlur
 }) => {
     const [isFocused, setIsFocused] = React.useState(false);
 
@@ -158,8 +174,14 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
                 return false;
             },
         },
-        onFocus: () => setIsFocused(true),
-        onBlur: () => setIsFocused(false),
+        onFocus: () => {
+            setIsFocused(true);
+            onFocus?.();
+        },
+        onBlur: () => {
+            setIsFocused(false);
+            onBlur?.();
+        },
         onUpdate: ({ editor }) => {
             if (onUpdate) {
                 onUpdate(editor);
@@ -235,7 +257,22 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
 
     return (
         <EditorContainer isFocused={isFocused}>
-            <EditorContent editor={editor} />
+            <EditorContentWrapper>
+                <EditorContent editor={editor} />
+            </EditorContentWrapper>
+            <InputToolbar
+                onSubmit={() => {
+                    if (editor && !editable) return;
+                    const text = editor.getText();
+                    if (text.trim() && onSubmit) {
+                        onSubmit(text);
+                        editor.commands.clearContent();
+                    }
+                }}
+                onAddContext={onAddContext}
+                canSubmit={editor ? editor.getText().trim().length > 0 && editable : false}
+                tokenCount={tokenCount}
+            />
         </EditorContainer>
     );
 };
