@@ -4,7 +4,6 @@ import { IIdeMessenger } from '../protocol/IdeMessenger';
 import { initializeTheme } from './styles/theme';
 import { LayoutTopDiv, GridDiv } from './components/styled';
 import { Chat } from './components/Chat';
-import { Footer } from './components/Footer';
 import { DialogProvider } from './components/DialogProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -216,7 +215,6 @@ export const App: React.FC<AppProps> = ({ messenger }) => {
                 <LayoutTopDiv>
                     <GridDiv>
                         <Chat messenger={messenger} />
-                        <Footer />
                     </GridDiv>
                 </LayoutTopDiv>
             </DialogProvider>
