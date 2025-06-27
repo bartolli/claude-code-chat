@@ -22,6 +22,36 @@ export interface ClaudeProcess {
   on: (event: string, listener: (...args: any[]) => void) => void;
 }
 
+// ============= MCP-specific Types =============
+
+// MCP tool result content structure
+export interface McpToolResultContent {
+  type: 'text';
+  text: string;
+}
+
+// MCP server configuration from .mcp.json
+export interface McpServerConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  transport?: 'stdio' | 'sse' | 'http';
+  url?: string; // For SSE/HTTP transports
+  headers?: Record<string, string>; // For SSE/HTTP
+}
+
+export interface McpConfig {
+  mcpServers: Record<string, McpServerConfig>;
+}
+
+// MCP server status from system init message
+export interface McpServerStatus {
+  name: string;
+  status: 'connected' | 'disconnected' | 'error';
+}
+
+// ============= Core Types =============
+
 export interface ClaudeMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -57,10 +87,7 @@ export interface ClaudeSystemMessage {
   cwd?: string;
   session_id?: string;
   tools?: string[];
-  mcp_servers?: Array<{
-    name: string;
-    status: string;
-  }>;
+  mcp_servers?: McpServerStatus[];
   model?: string;
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
   apiKeySource?: string;
@@ -102,7 +129,7 @@ export interface ClaudeUserMessage {
     content: Array<{
       type: 'text' | 'tool_result';
       text?: string;
-      content?: string;
+      content?: string | McpToolResultContent[]; // MCP returns array
       tool_use_id?: string;
       is_error?: boolean;
     }>;
