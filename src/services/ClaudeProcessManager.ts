@@ -9,6 +9,7 @@ import { getLogger } from '../core/Logger';
 import { ErrorBoundary, ApplicationError, ErrorCodes } from '../core/ErrorBoundary';
 import { Result, ok, err } from '../core/Result';
 import { ClaudeProcess, ClaudeProcessOptions } from '../types/claude';
+import { mcpService } from './McpService';
 
 export interface SpawnOptions extends ClaudeProcessOptions {
   sessionId: string;
@@ -185,13 +186,13 @@ export class ClaudeProcessManager {
       args.push('--dangerously-skip-permissions');
     }
     
-    // Add MCP config flag if .mcp.json exists
+    // Add MCP config flag using McpService
     const workingDir = options.cwd || process.cwd();
-    const mcpJsonPath = path.join(workingDir, '.mcp.json');
-    if (fs.existsSync(mcpJsonPath)) {
-      args.push('--mcp-config', '.mcp.json');
-      ClaudeProcessManager.logger.info('ClaudeProcessManager', 'Found .mcp.json, adding --mcp-config flag', {
-        path: mcpJsonPath
+    const mcpFlags = mcpService.getMcpConfigFlag(workingDir);
+    if (mcpFlags.length > 0) {
+      args.push(...mcpFlags);
+      ClaudeProcessManager.logger.info('ClaudeProcessManager', 'Adding MCP config flags', {
+        flags: mcpFlags
       });
     }
     

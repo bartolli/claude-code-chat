@@ -10,3 +10,4 @@ export * from './StreamProcessor';
 export * from './ChunkedJSONParser';
 export * from './ProgressiveUIUpdater';
 export * from './StreamIntegration';
+export * from './McpService';

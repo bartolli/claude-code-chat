@@ -8,6 +8,7 @@ import { StreamProcessor } from './StreamProcessor';
 import { ChunkedJSONParser } from './ChunkedJSONParser';
 import { ClaudeStreamMessage } from '../types/claude';
 import { Readable } from 'stream';
+import { mcpService } from './McpService';
 
 /**
  * Simplified ExtensionMessageHandler for compilation
@@ -194,6 +195,43 @@ export class ExtensionMessageHandler {
             this.logger.info('ExtensionMessageHandler', `Running command: ${fullCommand}`);
             this.outputChannel.appendLine(`\nExecuting command: ${fullCommand}`);
             this.outputChannel.appendLine(`Working directory: ${cwd}`);
+            
+            // Test McpService - Log MCP configuration
+            this.outputChannel.appendLine('\n========== MCP SERVICE TEST ==========');
+            try {
+                // Test loading MCP config
+                const mcpConfig = await mcpService.loadMcpConfig(cwd);
+                if (mcpConfig) {
+                    this.outputChannel.appendLine(`[MCP] Found .mcp.json with ${Object.keys(mcpConfig.mcpServers).length} servers:`);
+                    Object.entries(mcpConfig.mcpServers).forEach(([name, config]) => {
+                        this.outputChannel.appendLine(`[MCP]   - ${name}: ${config.command} ${config.args?.join(' ') || ''}`);
+                    });
+                } else {
+                    this.outputChannel.appendLine(`[MCP] No .mcp.json found in ${cwd}`);
+                }
+                
+                // Test listing all servers with scope precedence
+                const allConfigs = await mcpService.loadAllConfigs(cwd);
+                this.outputChannel.appendLine('\n[MCP] Configuration scope analysis:');
+                this.outputChannel.appendLine(`[MCP]   Local: ${allConfigs.local ? Object.keys(allConfigs.local.mcpServers).length + ' servers' : 'none'}`);
+                this.outputChannel.appendLine(`[MCP]   Project: ${allConfigs.project ? Object.keys(allConfigs.project.mcpServers).length + ' servers' : 'none'}`);
+                this.outputChannel.appendLine(`[MCP]   User: ${allConfigs.user ? Object.keys(allConfigs.user.mcpServers).length + ' servers' : 'none'}`);
+                
+                // Test merged configuration
+                const mergedServers = mcpService.mergeConfigs(allConfigs.local, allConfigs.project, allConfigs.user);
+                this.outputChannel.appendLine(`\n[MCP] Merged configuration (${mergedServers.length} total servers):`);
+                mergedServers.forEach(server => {
+                    this.outputChannel.appendLine(`[MCP]   - ${server.name} (${server.scope}): ${server.command}`);
+                });
+                
+                // Test getMcpConfigFlag
+                const mcpFlags = mcpService.getMcpConfigFlag(cwd);
+                this.outputChannel.appendLine(`\n[MCP] CLI flags: ${mcpFlags.length > 0 ? mcpFlags.join(' ') : 'none'}`);
+                
+            } catch (error) {
+                this.outputChannel.appendLine(`[MCP] Error testing McpService: ${error}`);
+            }
+            this.outputChannel.appendLine('========== END MCP SERVICE TEST ==========\n');
             
             // Setup process environment
             const processEnv: any = { 
