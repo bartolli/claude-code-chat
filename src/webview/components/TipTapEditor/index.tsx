@@ -16,9 +16,10 @@ import {
 import { InputToolbar } from './InputToolbar';
 import '../../styles/components/TipTapEditor.css';
 
-const EditorContainer = styled.div<{ isFocused: boolean }>`
+const EditorContainer = styled.div<{ isFocused: boolean; hasLump?: boolean }>`
     background-color: ${vscInputBackground};
-    border-radius: ${defaultBorderRadius};
+    border: 1px solid ${props => props.isFocused ? vscCommandCenterActiveBorder : vscCommandCenterInactiveBorder};
+    border-radius: ${props => props.hasLump ? `0 0 ${defaultBorderRadius} ${defaultBorderRadius}` : defaultBorderRadius};
     display: flex;
     flex-direction: column;
     min-height: 80px;
@@ -27,7 +28,7 @@ const EditorContainer = styled.div<{ isFocused: boolean }>`
     color: ${vscForeground};
     font-size: var(--vscode-font-size);
     font-family: var(--vscode-font-family);
-    opacity: ${props => props.isFocused ? 1 : 0.95};
+    margin: ${props => props.hasLump ? '0 4px' : '0'};
 
     .ProseMirror {
         outline: none;
@@ -91,6 +92,7 @@ interface TipTapEditorProps {
     models?: Array<{ id: string; name: string }>;
     selectedModelId?: string;
     onModelChange?: (modelId: string) => void;
+    hasLump?: boolean;
 }
 
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({ 
@@ -105,7 +107,8 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     onBlur,
     models,
     selectedModelId,
-    onModelChange
+    onModelChange,
+    hasLump = false
 }) => {
     const [isFocused, setIsFocused] = React.useState(false);
 
@@ -262,7 +265,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     }
 
     return (
-        <EditorContainer isFocused={isFocused}>
+        <EditorContainer isFocused={isFocused} hasLump={hasLump}>
             <EditorContentWrapper>
                 <EditorContent editor={editor} />
             </EditorContentWrapper>

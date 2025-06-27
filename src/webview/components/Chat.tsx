@@ -45,9 +45,7 @@ const StepsDiv = styled.div`
 const InputArea = styled.div`
     position: sticky;
     bottom: 0;
-    background-color: ${varWithFallback('editor-background')};
-    padding: 12px 16px;
-    border-top: 1px solid ${varWithFallback('border')};
+    padding: 0px;
     z-index: 10;
 `;
 
@@ -164,20 +162,28 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                         <EmptyChatBody showOnboardingCard={false} />
                     ) : (
                         <>
-                            {messages.map((msg, index) => (
-                                <MessageContainer key={index}>
-                                    <StepContainer
-                                        content={msg.content}
-                                        role={msg.role}
-                                        index={index}
-                                        isLast={index === messages.length - 1}
-                                        onDelete={() => console.log('Delete message', index)}
-                                        onContinue={() => console.log('Continue generation')}
-                                        thinking={msg.thinking}
-                                        toolUses={msg.toolUses}
-                                    />
-                                </MessageContainer>
-                            ))}
+                            {messages.map((msg, index) => {
+                                // Determine if this is the last user message and we're streaming
+                                const isLastUserMessage = msg.role === 'user' && 
+                                    messages.slice(index + 1).every(m => m.role !== 'user');
+                                const shouldShowGradient = showWaitingIndicator && isLastUserMessage;
+                                
+                                return (
+                                    <MessageContainer key={index}>
+                                        <StepContainer
+                                            content={msg.content}
+                                            role={msg.role}
+                                            index={index}
+                                            isLast={index === messages.length - 1}
+                                            isStreaming={shouldShowGradient}
+                                            onDelete={() => console.log('Delete message', index)}
+                                            onContinue={() => console.log('Continue generation')}
+                                            thinking={msg.thinking}
+                                            toolUses={msg.toolUses}
+                                        />
+                                    </MessageContainer>
+                                );
+                            })}
                             
                             {/* Show waiting indicator when Claude is processing */}
                             {showWaitingIndicator && (

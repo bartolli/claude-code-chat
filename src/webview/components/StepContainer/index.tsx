@@ -6,6 +6,7 @@ import { StyledMarkdownPreview } from '../StyledMarkdownPreview';
 import { ResponseActions } from './ResponseActions';
 import { ThinkingIndicator } from '../ThinkingIndicator';
 import { ToolUseDisplay } from '../ToolUseDisplay';
+import { GradientBorder } from './GradientBorder';
 
 interface StepContainerProps {
     content: string;
@@ -39,8 +40,8 @@ const UserMessageDiv = styled.div`
     color: var(--vscode-descriptionForeground);
     font-style: italic;
     padding: 8px 12px;
-    margin: 8px 0;
-    border-left: 3px solid var(--vscode-input-border);
+    background-color: var(--vscode-input-background);
+    border-radius: 5px;
 `;
 
 export const StepContainer: React.FC<StepContainerProps> = ({
@@ -84,7 +85,9 @@ export const StepContainer: React.FC<StepContainerProps> = ({
         <div>
             <ContentDiv fontSize={getFontSize()}>
                 {role === 'user' ? (
-                    <UserMessageDiv>{content}</UserMessageDiv>
+                    <GradientBorder isStreaming={isStreaming}>
+                        <UserMessageDiv>{content}</UserMessageDiv>
+                    </GradientBorder>
                 ) : (
                     <>
                         {/* Show thinking if available */}

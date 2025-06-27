@@ -118,12 +118,35 @@ Focus on essential visual updates to match the Continue extension's design, star
 
 ---
 
-## Phase 4: Optional Components (DEFERRED)
-These can be added later as needed:
-- Lump component for extended functionality
+## Phase 4: Optional Components
+
+### SUB-TASK 10: Implement Lump Toolbar Component ✅
+**Goal**: Create the toolbar that appears above the input
+**Changes**:
+- Created Lump.tsx with LumpDiv styled component
+- Implemented the "attached look" with rounded top corners only
+- Added toolbar buttons for Models, Rules, Docs, Prompts
+- Updated GradientBorder to have no top radius when Lump is present
+- Matching 4px margins for seamless alignment
+**Visual Check**: Toolbar appears above input with seamless attachment
+**Status**: Completed
+
+### SUB-TASK 11: Move GradientBorder to Message Component ✅
+**Goal**: Apply gradient animation to user messages during streaming
+**Changes**:
+- Removed GradientBorder from ContinueInputBox
+- Restored regular border to TipTapEditor
+- Added GradientBorder to StepContainer for user messages
+- Pass isStreaming to last user message when processing
+- Updated UserMessageDiv styling
+**Visual Check**: User messages show gradient border when Claude is responding
+**Status**: Completed
+
+### Remaining Optional Components (DEFERRED)
 - RulesPeek for displaying active rules
 - ContextItemsPeek for context indicators
 - Additional visual states
+- Lump content expansion functionality
 
 ---
 
@@ -178,4 +201,24 @@ These can be added later as needed:
     - Last message is from user OR
     - Last message is empty assistant with no content/tools
   - Removed direct Redux dependency from ContinueInputBox
-- Next: Final tasks - Responsive behavior and polish
+
+### Additional Updates - 2025-06-27
+- ✅ Restructured layout for fixed bottom input
+  - Chat uses column-reverse for typewriter effect
+  - InputArea is sticky at bottom with proper z-index
+  - Messages appear at bottom and scroll up
+- ✅ Moved model selector to input toolbar
+  - Created compact ModelSelector component
+  - Integrated into InputToolbar next to context button
+  - Props passed through all components
+- ✅ Implemented Lump Toolbar Component (SUB-TASK 10)
+  - Created Lump.tsx with seamless attachment pattern
+  - Rounded top corners only, no bottom border
+  - Toolbar buttons for Models, Rules, Docs, Prompts
+  - GradientBorder adjusts radius when Lump is present
+  - Matching 4px margins for alignment
+- ✅ Corrected GradientBorder Implementation (SUB-TASK 11)
+  - Moved GradientBorder from input to user messages
+  - Restored regular border to input editor
+  - GradientBorder now highlights the message Claude is responding to
+  - Proper streaming state detection for last user message

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import styled from 'styled-components';
 import { TipTapEditor } from '../TipTapEditor';
-import { GradientBorder } from './GradientBorder';
+import { Lump } from './Lump';
 import { Editor } from '@tiptap/react';
 import { IIdeMessenger } from '../../../protocol/IdeMessenger';
 
@@ -21,6 +21,7 @@ interface ContinueInputBoxProps {
     models?: Array<{ id: string; name: string }>;
     selectedModelId?: string;
     onModelChange?: (modelId: string) => void;
+    isMainInput?: boolean;
 }
 
 export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
@@ -31,7 +32,8 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
     isStreaming = false,
     models,
     selectedModelId,
-    onModelChange
+    onModelChange,
+    isMainInput = true
 }) => {
     const [content, setContent] = useState('');
     const [isFocused, setIsFocused] = useState(false);
@@ -60,25 +62,25 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
 
     return (
         <Container>
-            <GradientBorder isStreaming={isStreaming} isFocused={isFocused}>
-                <TipTapEditor
-                    placeholder={disabled ? "Processing..." : placeholder}
-                    onSubmit={handleSubmit}
-                    onUpdate={handleEditorUpdate}
-                    autoFocus={!disabled}
-                    editable={!disabled}
-                    onAddContext={() => {
-                        // TODO: Implement context menu
-                        console.log('Add context clicked');
-                    }}
-                    tokenCount={estimateTokens(content)}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                    models={models}
-                    selectedModelId={selectedModelId}
-                    onModelChange={onModelChange}
-                />
-            </GradientBorder>
+            <Lump isMainInput={isMainInput} />
+            <TipTapEditor
+                placeholder={disabled ? "Processing..." : placeholder}
+                onSubmit={handleSubmit}
+                onUpdate={handleEditorUpdate}
+                autoFocus={!disabled}
+                editable={!disabled}
+                onAddContext={() => {
+                    // TODO: Implement context menu
+                    console.log('Add context clicked');
+                }}
+                tokenCount={estimateTokens(content)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                models={models}
+                selectedModelId={selectedModelId}
+                onModelChange={onModelChange}
+                hasLump={isMainInput}
+            />
         </Container>
     );
 };
