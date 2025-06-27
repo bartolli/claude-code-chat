@@ -608,6 +608,23 @@ export class ExtensionMessageHandler {
                         this.currentSessionId = json.session_id;
                         this.outputChannel.appendLine(`[DEBUG] Stored session ID: ${this.currentSessionId}`);
                     }
+                    
+                    // Handle MCP server status
+                    if (json.mcp_servers && Array.isArray(json.mcp_servers)) {
+                        this.outputChannel.appendLine(`[JSON] MCP Servers: ${json.mcp_servers.length} servers found`);
+                        json.mcp_servers.forEach((server: any) => {
+                            this.outputChannel.appendLine(`[JSON] MCP Server: ${server.name} - ${server.status}`);
+                        });
+                        
+                        // Send MCP server status to UI
+                        this.webviewProtocol?.post('mcp/status', {
+                            servers: json.mcp_servers.map((s: any) => ({
+                                name: s.name,
+                                status: s.status // 'connected' | 'disconnected' | 'error'
+                            }))
+                        });
+                    }
+                    
                     onMetadata({
                         sessionId: json.session_id,
                         apiKeySource: json.apiKeySource

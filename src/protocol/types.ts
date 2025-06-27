@@ -41,6 +41,14 @@ export interface ToWebviewProtocol {
         tools: string[]; 
         mcpServers: string[] 
     }];
+    
+    // MCP Server Status
+    'mcp/status': [void, {
+        servers: Array<{
+            name: string;
+            status: 'connected' | 'disconnected' | 'error';
+        }>;
+    }];
 
     // Status Messages
     'status/ready': [void, string];
