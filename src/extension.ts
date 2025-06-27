@@ -196,8 +196,7 @@ class ClaudeChatProvider {
             <title>Claude Code GUI</title>
         </head>
         <body>
-            <h1>Claude Code GUI - Step 3</h1>
-            <p>ServiceContainer issue detected. Using fallback UI.</p>
+            <h1>ServiceContainer issue detected.</h1>
             <p>Check the console for error details.</p>
         </body>
         </html>`;
@@ -251,23 +250,18 @@ class ClaudeChatProvider {
                 models: [
                     { 
                         id: 'sonnet', 
-                        name: 'Claude 3.5 Sonnet', 
-                        description: 'Balanced model - Good balance of speed and capability'
+                        name: 'Sonnet 4', 
+                        description: 'Sonnet 4 for daily use'
                     },
                     { 
                         id: 'opus', 
-                        name: 'Claude 3 Opus', 
-                        description: 'Most capable model - Best for complex tasks'
-                    },
-                    { 
-                        id: 'haiku', 
-                        name: 'Claude 3.5 Haiku', 
-                        description: 'Fast model - Best for simple tasks'
+                        name: 'Opus 4', 
+                        description: 'Opus 4 for complex tasks · Reaches usage limits ~5x faster'
                     },
                     { 
                         id: 'default', 
                         name: 'Default Model', 
-                        description: 'Uses your Claude CLI default configuration'
+                        description: 'Opus 4 for up to 50% of usage limits, then use Sonnet 4'
                     }
                 ],
                 selectedModel: selectedModel,
