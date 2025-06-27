@@ -1,5 +1,27 @@
 # MCP Implementation Plan
 
+## Current Status
+**Last Updated:** December 27, 2024
+
+### Completed Tasks ✅
+1. **Fixed MCP tool crash** - Properly extract text from MCP tool result arrays
+2. **Verified ToolUseDisplay** - Component already handles MCP structures correctly
+3. **Added MCP-specific types** - Type-safe MCP structures throughout codebase
+4. **Added --mcp-config support** - Automatically detects and uses .mcp.json
+5. **Handle MCP server status** - Tracks and reports server connection status
+
+### Remaining Tasks 📋
+1. **Create McpService** - Management commands for UI display
+2. **Implement config loading** - Handle scope precedence (local/project/user)
+3. **Full testing** - Comprehensive testing with multiple MCP servers
+
+### Core Functionality Status
+✅ MCP servers automatically load from .mcp.json  
+✅ Tool calls work without crashes  
+✅ Server connection status is tracked  
+✅ All MCP structures are properly typed  
+✅ Tool results display correctly in UI
+
 ## Overview
 This document outlines the implementation plan for adding proper Model Context Protocol (MCP) support to the Claude Code Chat extension. The extension uses Claude Code in non-interactive streaming mode (`-p` flag with `--output-format stream-json`), so all MCP functionality must be handled through command-line arguments and JSON stream processing.
 
@@ -18,49 +40,41 @@ The webview crashes when expanding MCP tool containers because:
 
 ## Implementation Tasks
 
-### 1. Fix Immediate MCP Tool Crash (Priority: HIGH)
+### 1. Fix Immediate MCP Tool Crash (Priority: HIGH) ✅ COMPLETED
 **File:** `src/services/ExtensionMessageHandler.ts:678`
 
-**Current Issue:**
-```typescript
-result: block.content || block.text,
-```
+**Issue:** MCP tools return results with nested content array structure that caused React error #31
 
-**MCP Tool Result Structure (from CLI output):**
-```json
-{
-  "type": "tool_result",
-  "content": [
-    {
-      "type": "text",
-      "text": "{\n  \"timezone\": \"Europe/Sofia\",\n  \"datetime\": \"2025-06-27T21:45:08+03:00\",\n  \"is_dst\": true\n}"
-    }
-  ]
-}
-```
+**Solution Implemented:**
+- Added logic to extract text from MCP tool result content arrays
+- Handles both native tool results (string content) and MCP results (array of {type, text} objects)
+- Added debug logging for tracking MCP result extraction
+- Successfully tested with time server
 
-**Fix Implementation:**
+**Code Added:**
 ```typescript
 // Extract text from MCP tool result content array
 let resultText = block.text;
 if (!resultText && Array.isArray(block.content)) {
   // Handle MCP tool results with content array
-  const textContent = block.content.find(c => c.type === 'text');
+  const textContent = block.content.find((c: any) => c.type === 'text');
   resultText = textContent?.text || JSON.stringify(block.content);
+  this.outputChannel.appendLine(`[JSON] Extracted MCP result text: ${resultText?.substring(0, 100)}...`);
 } else if (!resultText && block.content) {
   // Handle native tool results
   resultText = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
 }
-result: resultText,
 ```
 
-### 2. Verify ToolUseDisplay Component (Priority: HIGH)
+### 2. Verify ToolUseDisplay Component (Priority: HIGH) ✅ COMPLETED
 **File:** `src/webview/components/ToolUseDisplay/index.tsx`
 
-- Already updated formatInput function (lines 161-185)
-- Handles `{type: 'text', text: string}` objects
-- Verify String() conversion on line 205 works correctly
-- Test with both native and MCP tool inputs
+**Verification Results:**
+- formatInput function already handles MCP structures correctly
+- Properly converts `{type: 'text', text: string}` objects and arrays
+- String() conversion on line 205 ensures safe rendering
+- Tested successfully with both native and MCP tool inputs
+- No changes needed - existing implementation was sufficient
 
 ### 3. Create McpService (Priority: MEDIUM)
 **New file:** `src/services/McpService.ts`
@@ -142,48 +156,20 @@ export class McpService {
 }
 ```
 
-### 4. Add MCP-Specific Types (Priority: MEDIUM)
+### 4. Add MCP-Specific Types (Priority: MEDIUM) ✅ COMPLETED
 **File:** `src/types/claude.ts`
 
-Add the following types:
-```typescript
-// MCP tool result content structure
-export interface McpToolResultContent {
-  type: 'text';
-  text: string;
-}
+**Types Added:**
+1. **McpToolResultContent** - Defines the structure of MCP tool result content
+2. **McpServerConfig** - Configuration structure for MCP servers
+3. **McpConfig** - Top-level .mcp.json structure
+4. **McpServerStatus** - Server status from system init messages
 
-// MCP configuration from .mcp.json
-export interface McpServerConfig {
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  transport?: 'stdio' | 'sse' | 'http';
-  url?: string; // For SSE/HTTP transports
-  headers?: Record<string, string>; // For SSE/HTTP
-}
-
-export interface McpConfig {
-  mcpServers: Record<string, McpServerConfig>;
-}
-
-// Update ClaudeUserMessage to handle MCP content
-export interface ClaudeUserMessage {
-  type: 'user';
-  message: {
-    role: 'user';
-    content: Array<{
-      type: 'text' | 'tool_result';
-      text?: string;
-      content?: string | McpToolResultContent[]; // MCP returns array
-      tool_use_id?: string;
-      is_error?: boolean;
-    }>;
-  };
-  parent_tool_use_id?: string | null;
-  session_id?: string;
-}
-```
+**Updates Made:**
+- Added MCP types at the beginning of the file for proper ordering
+- Updated `ClaudeUserMessage` to handle MCP tool result content arrays
+- Updated `ClaudeSystemMessage` to use `McpServerStatus[]` type
+- All types compile successfully
 
 ### 5. Implement MCP Config Loading (Priority: MEDIUM)
 **Scope Precedence:** local > project > user
@@ -194,48 +180,57 @@ export interface ClaudeUserMessage {
 - Check user settings (`~/.config/claude/settings.user.json`)
 - Merge configurations with proper precedence
 
-### 6. Add --mcp-config Support (Priority: MEDIUM)
+### 6. Add --mcp-config Support (Priority: MEDIUM) ✅ COMPLETED
 **File:** `src/services/ClaudeProcessManager.ts`
 
-Add to spawn arguments:
-```typescript
-// In spawnClaude method
-const mcpService = new McpService();
-const mcpFlags = mcpService.getMcpConfigFlag(options.cwd || process.cwd());
-if (mcpFlags.length > 0) {
-  args.push(...mcpFlags);
-}
+**Implementation:**
+- Added imports for `fs` and `path`
+- Modified `buildArguments` method to check for `.mcp.json` in working directory
+- Automatically adds `--mcp-config .mcp.json` flag when file exists
+- Added logging to track when MCP config is detected
 
-// Optional: Add allowed tools for MCP
-const mcpConfig = await mcpService.loadMcpConfig(options.cwd || process.cwd());
-if (mcpConfig && Object.keys(mcpConfig.mcpServers).length > 0) {
-  const mcpTools = Object.keys(mcpConfig.mcpServers)
-    .map(name => `mcp__${name}__*`)
-    .join(',');
-  args.push('--allowedTools', mcpTools);
+**Code Added:**
+```typescript
+// Add MCP config flag if .mcp.json exists
+const workingDir = options.cwd || process.cwd();
+const mcpJsonPath = path.join(workingDir, '.mcp.json');
+if (fs.existsSync(mcpJsonPath)) {
+  args.push('--mcp-config', '.mcp.json');
+  ClaudeProcessManager.logger.info('ClaudeProcessManager', 'Found .mcp.json, adding --mcp-config flag', {
+    path: mcpJsonPath
+  });
 }
 ```
 
-### 7. Handle MCP Server Status (Priority: LOW)
+### 7. Handle MCP Server Status (Priority: LOW) ✅ COMPLETED
 **File:** `src/services/ExtensionMessageHandler.ts`
 
-In the system message handler:
+**Implementation:**
+- Added MCP server status handling in system init message
+- Logs each server's name and connection status
+- Sends status to UI via `mcp/status` message
+
+**Protocol Update:**
+- Added `mcp/status` message type to `src/protocol/types.ts`
+- Defined structure for MCP server status data
+
+**Code Added:**
 ```typescript
-case 'system':
-  if (json.subtype === 'init') {
-    // Existing session ID handling...
-    
-    // Handle MCP server status
-    if (json.mcp_servers) {
-      this.webviewProtocol?.post('mcp/status', {
-        servers: json.mcp_servers.map(s => ({
-          name: s.name,
-          status: s.status, // 'connected' | 'disconnected' | 'error'
-        }))
-      });
-    }
-  }
-  break;
+// Handle MCP server status
+if (json.mcp_servers && Array.isArray(json.mcp_servers)) {
+  this.outputChannel.appendLine(`[JSON] MCP Servers: ${json.mcp_servers.length} servers found`);
+  json.mcp_servers.forEach((server: any) => {
+    this.outputChannel.appendLine(`[JSON] MCP Server: ${server.name} - ${server.status}`);
+  });
+  
+  // Send MCP server status to UI
+  this.webviewProtocol?.post('mcp/status', {
+    servers: json.mcp_servers.map((s: any) => ({
+      name: s.name,
+      status: s.status // 'connected' | 'disconnected' | 'error'
+    }))
+  });
+}
 ```
 
 ### 8. Testing Configuration (Priority: LOW)
