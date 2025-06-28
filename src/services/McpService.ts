@@ -13,6 +13,7 @@ import { McpConfig, McpServerConfig, McpServerStatus } from '../types/claude';
 export interface McpServerInfo extends McpServerConfig {
   name: string;
   scope?: 'local' | 'project' | 'user';
+  status?: 'connected' | 'disconnected' | 'error';
 }
 
 export class McpService {
@@ -23,13 +24,21 @@ export class McpService {
    * List all configured MCP servers
    * @param scope - Optional scope to filter servers
    */
-  async listServers(scope?: 'local' | 'project' | 'user'): Promise<McpServerInfo[]> {
+  async listServers(scope?: 'local' | 'project' | 'user', cwd?: string): Promise<McpServerInfo[]> {
     try {
       const cmd = scope ? `claude mcp list -s ${scope}` : 'claude mcp list';
-      McpService.logger.info('McpService', `Executing: ${cmd}`);
+      McpService.logger.info('McpService', `Executing: ${cmd} in ${cwd || 'current directory'}`);
       
-      const { stdout } = await this.execAsync(cmd);
-      return this.parseServerList(stdout);
+      const options = cwd ? { cwd } : undefined;
+      const { stdout, stderr } = await this.execAsync(cmd, options);
+      McpService.logger.info('McpService', `CLI stdout: "${stdout}"`);
+      if (stderr) {
+        McpService.logger.warn('McpService', `CLI stderr: ${stderr}`);
+      }
+      
+      const servers = this.parseServerList(stdout.toString());
+      McpService.logger.info('McpService', `Parsed ${servers.length} servers from output`);
+      return servers;
     } catch (error) {
       McpService.logger.error('McpService', 'Failed to list MCP servers', error as Error);
       // Fall back to reading config files directly
@@ -175,16 +184,27 @@ export class McpService {
   }
 
   private parseServerList(output: string): McpServerInfo[] {
-    // Parse CLI output format
-    // This is a placeholder - actual implementation depends on CLI output format
+    // Parse CLI output format: "name: command args..."
     const servers: McpServerInfo[] = [];
     
-    // Example parsing logic (adjust based on actual CLI output)
-    const lines = output.trim().split('\n');
+    const lines = output.trim().split('\n').filter(line => line.trim());
     for (const line of lines) {
-      if (line.includes('Server:') || line.includes('Name:')) {
-        // Extract server info from CLI output
-        // This would need to be implemented based on actual format
+      const colonIndex = line.indexOf(':');
+      if (colonIndex > 0) {
+        const name = line.substring(0, colonIndex).trim();
+        const commandAndArgs = line.substring(colonIndex + 1).trim();
+        
+        // Extract command and args
+        const parts = commandAndArgs.split(' ');
+        const command = parts[0];
+        const args = parts.slice(1);
+        
+        servers.push({
+          name,
+          command,
+          args: args.length > 0 ? args : undefined,
+          status: 'disconnected' // Default status, will be updated when Claude connects
+        });
       }
     }
     

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ServiceContainer } from '../core/ServiceContainer';
 import { Logger } from '../core/Logger';
 import { SimpleWebviewProtocol } from '../protocol/SimpleWebviewProtocol';
@@ -91,6 +93,12 @@ export class ExtensionMessageHandler {
                 return {
                     conversations: []
                 } as any;
+                
+            case 'mcp/getServers':
+                // Get MCP servers and send them to the UI
+                this.logger.info('ExtensionMessageHandler', 'Getting MCP servers');
+                await this.loadAndSendMcpServers();
+                return undefined as any;
             
             case 'permission/response':
                 // Handle permission response
@@ -650,17 +658,43 @@ export class ExtensionMessageHandler {
                     // Handle MCP server status
                     if (json.mcp_servers && Array.isArray(json.mcp_servers)) {
                         this.outputChannel.appendLine(`[JSON] MCP Servers: ${json.mcp_servers.length} servers found`);
-                        json.mcp_servers.forEach((server: any) => {
+                        
+                        // Calculate tool counts per server if available
+                        const serversWithCounts = json.mcp_servers.map((server: any) => {
                             this.outputChannel.appendLine(`[JSON] MCP Server: ${server.name} - ${server.status}`);
+                            
+                            // Count tools for this server by checking tool names with mcp__ prefix
+                            let toolCount = 0;
+                            if (json.tools && Array.isArray(json.tools)) {
+                                // MCP tools have format: mcp__servername__toolname
+                                const serverPrefix = `mcp__${server.name}__`;
+                                toolCount = json.tools.filter((tool: string) => 
+                                    tool.startsWith(serverPrefix)
+                                ).length;
+                                this.outputChannel.appendLine(`[JSON]   - Tool count for ${server.name}: ${toolCount}`);
+                            }
+                            
+                            return {
+                                name: server.name,
+                                status: server.status, // 'connected' | 'disconnected' | 'error'
+                                toolCount: toolCount,
+                                promptCount: 0 // TODO: Get prompt count when available
+                            };
                         });
                         
-                        // Send MCP server status to UI
+                        // Send MCP server status to UI with tool counts
                         this.webviewProtocol?.post('mcp/status', {
-                            servers: json.mcp_servers.map((s: any) => ({
-                                name: s.name,
-                                status: s.status // 'connected' | 'disconnected' | 'error'
-                            }))
+                            servers: serversWithCounts
                         });
+                    }
+                    
+                    // Log available tools for debugging
+                    if (json.tools && Array.isArray(json.tools)) {
+                        this.outputChannel.appendLine(`[JSON] Total tools available: ${json.tools.length}`);
+                        const nativeTools = json.tools.filter((t: string) => !t.startsWith('mcp__'));
+                        const mcpTools = json.tools.filter((t: string) => t.startsWith('mcp__'));
+                        this.outputChannel.appendLine(`[JSON]   - Native tools: ${nativeTools.length}`);
+                        this.outputChannel.appendLine(`[JSON]   - MCP tools: ${mcpTools.length}`);
                     }
                     
                     onMetadata({
@@ -1008,6 +1042,68 @@ export class ExtensionMessageHandler {
         }
         
         this.outputChannel.appendLine(`[Slash Command] Terminal opened for ${command}`);
+    }
+    
+    private async loadAndSendMcpServers() {
+        try {
+            const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+            this.outputChannel.appendLine(`[MCP] Loading ALL MCP servers from configuration...`);
+            this.outputChannel.appendLine(`[MCP] Working directory: ${cwd}`);
+            
+            // Load ALL servers from .mcp.json
+            const mcpConfig = await mcpService.loadMcpConfig(cwd);
+            if (!mcpConfig || !mcpConfig.mcpServers) {
+                this.outputChannel.appendLine(`[MCP] No .mcp.json found or no servers configured`);
+                this.webviewProtocol?.post('mcp/status', { servers: [] });
+                return;
+            }
+            
+            // Load Claude settings to get enabled/disabled servers
+            const localSettingsPath = path.join(cwd, '.claude', 'settings.local.json');
+            let enabledServers: string[] = [];
+            let disabledServers: string[] = [];
+            
+            try {
+                if (fs.existsSync(localSettingsPath)) {
+                    const settingsContent = await fs.promises.readFile(localSettingsPath, 'utf-8');
+                    const settings = JSON.parse(settingsContent);
+                    enabledServers = settings.enabledMcpjsonServers || [];
+                    disabledServers = settings.disabledMcpjsonServers || [];
+                    this.outputChannel.appendLine(`[MCP] Enabled servers: ${enabledServers.join(', ')}`);
+                    this.outputChannel.appendLine(`[MCP] Disabled servers: ${disabledServers.join(', ')}`);
+                }
+            } catch (error) {
+                this.outputChannel.appendLine(`[MCP] Failed to read settings: ${error}`);
+            }
+            
+            // Create server list with enabled status
+            const servers = Object.entries(mcpConfig.mcpServers).map(([name, config]) => {
+                const isEnabled = enabledServers.includes(name) || 
+                                 (!disabledServers.includes(name) && enabledServers.length === 0);
+                return {
+                    name,
+                    status: 'disconnected' as const,
+                    enabled: isEnabled,
+                    toolCount: 0,
+                    promptCount: 0,
+                    command: config.command,
+                    args: config.args
+                };
+            });
+            
+            this.outputChannel.appendLine(`[MCP] Found ${servers.length} total servers`);
+            servers.forEach(server => {
+                this.outputChannel.appendLine(`[MCP]   - ${server.name} (${server.enabled ? 'enabled' : 'disabled'})`);
+            });
+            
+            // Send all servers to UI
+            this.webviewProtocol?.post('mcp/status', { servers });
+            
+        } catch (error) {
+            this.logger.error('ExtensionMessageHandler', 'Failed to load MCP servers', error as Error);
+            this.outputChannel.appendLine(`[MCP] Error loading servers: ${error}`);
+            this.webviewProtocol?.post('mcp/status', { servers: [] });
+        }
     }
 
 }

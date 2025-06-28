@@ -198,9 +198,22 @@ export const App: React.FC<AppProps> = ({ messenger }) => {
             })
         );
 
+        unsubscribers.push(
+            messenger.on('mcp/status', (data) => {
+                // Handle MCP server status updates
+                console.log('[App.tsx] Received MCP status:', data);
+                // Use updateConnectedServers to merge with existing configured servers
+                dispatch({
+                    type: 'mcp/updateConnectedServers',
+                    payload: data.servers
+                });
+            })
+        );
+
         // Request initial data
         messenger.post('settings/get', undefined);
         messenger.post('conversation/getList', undefined);
+        messenger.post('mcp/getServers', undefined);
 
         // Cleanup function to unsubscribe all handlers
         return () => {

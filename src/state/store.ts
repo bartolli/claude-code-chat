@@ -8,13 +8,15 @@ import configReducer from './slices/configSlice';
 import uiReducer from './slices/uiSlice';
 import processesReducer from './slices/processesSlice';
 import claudeReducer from './slices/claudeSlice';
+import mcpReducer from './slices/mcpSlice';
 
 const rootReducer = combineReducers({
   session: sessionReducer,
   config: configReducer,
   ui: uiReducer,
   processes: processesReducer,
-  claude: claudeReducer
+  claude: claudeReducer,
+  mcp: mcpReducer
 });
 
 // Create the Redux store following GUI pattern

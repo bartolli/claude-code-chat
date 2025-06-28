@@ -11,6 +11,7 @@ import {
 import { varWithFallback } from '../../styles/theme';
 import { selectSelectedModel } from '../../../state/slices/configSlice';
 import { selectClaudeStatus } from '../../../state/slices/claudeSlice';
+import { selectMcpServers } from '../../../state/slices/mcpSlice';
 import '../../styles/components/Lump.css';
 
 const LumpDiv = styled.div`
@@ -103,9 +104,9 @@ const StatusIndicator = styled.span<{ $status: 'ready' | 'processing' | 'error' 
       case 'error':
         return varWithFallback('error');
       case 'disconnected':
-        return varWithFallback('description');
+        return lightGray;
       default:
-        return varWithFallback('description');
+        return lightGray;
     }
   }};
   font-size: 11px;
@@ -140,14 +141,15 @@ const MCPServerList = styled.div`
   gap: 6px;
 `;
 
-const MCPServerEntry = styled.div`
+const MCPServerEntry = styled.div<{ $enabled?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: 0px 8px;
   background: ${varWithFallback('list-hover')};
   border-radius: 4px;
   font-size: 11px;
+  opacity: ${props => props.$enabled ? 1 : 0.5};
 `;
 
 const MCPServerInfo = styled.div`
@@ -156,8 +158,8 @@ const MCPServerInfo = styled.div`
   gap: 6px;
 `;
 
-const MCPServerName = styled.span`
-  color: ${vscForeground};
+const MCPServerName = styled.span<{ $enabled?: boolean }>`
+  color: ${props => props.$enabled ? vscForeground : lightGray};
 `;
 
 const MCPServerStats = styled.span`
@@ -181,6 +183,25 @@ const MCPActionButton = styled.button`
   &:hover {
     background: rgba(255, 255, 255, 0.1);
     color: ${vscForeground};
+  }
+  
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+`;
+
+const MCPToggleButton = styled.button<{ $enabled?: boolean }>`
+  background: none;
+  border: none;
+  color: ${props => props.$enabled ? varWithFallback('success') : lightGray};
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 0.8;
   }
   
   svg {
@@ -221,6 +242,7 @@ export const Lump: React.FC<LumpProps> = ({ isMainInput = true }) => {
   // Get data from Redux store
   const selectedModel = useSelector(selectSelectedModel);
   const claudeStatus = useSelector(selectClaudeStatus);
+  const mcpServers = useSelector(selectMcpServers);
 
   // Determine status
   const getStatus = () => {
@@ -388,46 +410,55 @@ export const Lump: React.FC<LumpProps> = ({ isMainInput = true }) => {
         
         <MCPSettingsSection isVisible={showMCPSettings}>
           <MCPServerList>
-            {/* Mock MCP server entries */}
-            <MCPServerEntry>
-              <MCPServerInfo>
-                <StatusIndicator $status="ready">●</StatusIndicator>
-                <MCPServerName>filesystem</MCPServerName>
-                <MCPServerStats>5 tools • 0 prompts</MCPServerStats>
-              </MCPServerInfo>
-              <MCPActions>
-                <MCPActionButton title="Edit">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                  </svg>
-                </MCPActionButton>
-                <MCPActionButton title="Refresh">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                  </svg>
-                </MCPActionButton>
-              </MCPActions>
-            </MCPServerEntry>
-            
-            <MCPServerEntry>
-              <MCPServerInfo>
-                <StatusIndicator $status="error">●</StatusIndicator>
-                <MCPServerName>github</MCPServerName>
-                <MCPServerStats>0 tools • 0 prompts</MCPServerStats>
-              </MCPServerInfo>
-              <MCPActions>
-                <MCPActionButton title="Edit">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                  </svg>
-                </MCPActionButton>
-                <MCPActionButton title="Refresh">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                  </svg>
-                </MCPActionButton>
-              </MCPActions>
-            </MCPServerEntry>
+            {mcpServers.length > 0 ? (
+              mcpServers.map((server) => (
+                <MCPServerEntry key={server.name} $enabled={server.enabled}>
+                  <MCPServerInfo>
+                    <StatusIndicator $status={server.enabled ? (server.status === 'connected' ? 'ready' : server.status === 'error' ? 'error' : 'disconnected') : 'disconnected'}>
+                      ●
+                    </StatusIndicator>
+                    <MCPServerName $enabled={server.enabled}>{server.name}</MCPServerName>
+                    <MCPServerStats>
+                      {server.toolCount || 0} tools • {server.promptCount || 0} prompts
+                      {!server.enabled && ' (disabled)'}
+                    </MCPServerStats>
+                  </MCPServerInfo>
+                  <MCPActions>
+                    <MCPToggleButton 
+                      $enabled={server.enabled}
+                      title={server.enabled ? "Disable server" : "Enable server"}
+                      onClick={() => console.log('Toggle MCP server:', server.name, !server.enabled)}
+                    >
+                      {server.enabled ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12l2 2 4-4" />
+                        </svg>
+                      )}
+                    </MCPToggleButton>
+                    <MCPActionButton 
+                      title="Refresh"
+                      onClick={() => console.log('Refresh MCP server:', server.name)}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                      </svg>
+                    </MCPActionButton>
+                  </MCPActions>
+                </MCPServerEntry>
+              ))
+            ) : (
+              <MCPServerEntry>
+                <MCPServerInfo style={{ opacity: 0.7 }}>
+                  <MCPServerName>No MCP servers configured</MCPServerName>
+                </MCPServerInfo>
+              </MCPServerEntry>
+            )}
           </MCPServerList>
           
           <AddServerButton onClick={() => console.log('Add MCP Server')}>

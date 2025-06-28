@@ -14,13 +14,8 @@
 8. **Fixed webview theme issues** - Corrected missing theme color exports
 
 ### Remaining Tasks 📋
-1. **Full testing** - Comprehensive testing with multiple MCP servers
-2. **UI Integration** - Display real MCP server status in Lump component
-   - Create MCP Redux slice for state management
-   - Handle mcp/status messages from backend
-   - Replace mock data with real MCP server info
-   - Show actual tool counts per server
-   - Implement refresh functionality
+1. **MCP server refresh functionality** - Allow users to refresh MCP server status
+2. **MCP server edit/add functionality** - Future enhancement for managing servers
 
 ### Core Functionality Status
 ✅ MCP servers automatically load from .mcp.json  
@@ -31,6 +26,13 @@
 ✅ McpService provides full configuration management  
 ✅ Scope precedence (local > project > user) implemented  
 ✅ Debug logging shows MCP configuration details
+✅ MCP servers display in UI with real-time status
+✅ Tool counts calculated and displayed per server
+✅ Redux state management for MCP server data
+✅ Uses Claude CLI (`claude mcp list`) for accurate server listing
+✅ Respects Claude's permission settings (enabledMcpjsonServers)
+✅ Shows only enabled servers, not all configured servers
+✅ Properly handles server connection status updates
 
 ## Overview
 This document outlines the implementation plan for adding proper Model Context Protocol (MCP) support to the Claude Code Chat extension. The extension uses Claude Code in non-interactive streaming mode (`-p` flag with `--output-format stream-json`), so all MCP functionality must be handled through command-line arguments and JSON stream processing.
@@ -328,13 +330,26 @@ We successfully implemented comprehensive MCP support for the Claude Code Chat e
    - Implemented proper scope precedence (local > project > user)
    - Debug logging provides visibility into MCP operations
 
+5. **UI Integration** (New Tasks)
+   - Created MCP Redux slice for state management
+   - Added MCP status message handling in App component
+   - Connected Lump component to display real MCP server data
+   - Implemented tool count calculation from system init messages
+   - Replaced mock data with live MCP server information
+   - Added MCP server initialization on extension startup
+   - MCP servers now load immediately when extension opens
+
 ### Key Files Modified
-- `src/services/ExtensionMessageHandler.ts` - MCP result extraction and debug logging
+- `src/services/ExtensionMessageHandler.ts` - MCP result extraction, tool counting, and debug logging
 - `src/webview/components/ToolUseDisplay/index.tsx` - MCP input formatting
 - `src/types/claude.ts` - MCP type definitions
 - `src/services/ClaudeProcessManager.ts` - Automatic MCP config detection
 - `src/services/McpService.ts` - New service for MCP management
 - `src/protocol/types.ts` - MCP status message protocol
+- `src/state/slices/mcpSlice.ts` - New Redux slice for MCP state
+- `src/state/store.ts` - Added MCP reducer
+- `src/webview/App.tsx` - Added MCP status message handler
+- `src/webview/components/ContinueInputBox/Lump.tsx` - Connected to MCP Redux state
 
 ### Testing Results
 ✅ MCP tools (time, exa) execute without crashes  
@@ -342,5 +357,9 @@ We successfully implemented comprehensive MCP support for the Claude Code Chat e
 ✅ Server status tracked correctly  
 ✅ Configuration loading works with proper scope precedence  
 ✅ Debug output provides clear visibility into MCP operations
+✅ MCP servers display immediately on extension startup
+✅ Tool counts update correctly when Claude process starts
+✅ Server status changes from disconnected to connected
+✅ UI shows accurate real-time MCP server information
 
 The Claude Code Chat extension now has robust MCP support that "just works" when .mcp.json files are present!

@@ -47,6 +47,8 @@ export interface ToWebviewProtocol {
         servers: Array<{
             name: string;
             status: 'connected' | 'disconnected' | 'error';
+            toolCount?: number;
+            promptCount?: number;
         }>;
     }];
 
@@ -265,6 +267,9 @@ export interface FromWebviewProtocol {
         toolName: string;
         approved: boolean;
     }, void];
+    
+    // MCP requests
+    'mcp/getServers': [void, void];
 }
 
 // Helper types for type safety
