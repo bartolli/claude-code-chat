@@ -14,6 +14,8 @@ export interface McpServerInfo {
   promptCount?: number;
   command?: string;
   args?: string[];
+  env?: Record<string, string>;
+  scope?: 'user' | 'project' | 'local';
 }
 
 export interface McpState {
@@ -98,13 +100,12 @@ const mcpSlice = createSlice({
       }
       
       // When Claude connects, update status of servers
-      // Keep enabled status, just update connection status
+      // Keep enabled status and pre-fetched counts
       state.servers.forEach(server => {
         // Only update enabled servers
         if (server.enabled) {
           server.status = 'disconnected';
-          server.toolCount = 0;
-          server.promptCount = 0;
+          // Don't reset counts - preserve pre-fetched data
         }
       });
       
@@ -113,8 +114,14 @@ const mcpSlice = createSlice({
         const server = state.servers.find(s => s.name === connectedServer.name);
         if (server && server.enabled) {
           server.status = connectedServer.status;
-          server.toolCount = connectedServer.toolCount || 0;
-          server.promptCount = connectedServer.promptCount || 0;
+          // Only update counts if Claude provides them (non-zero)
+          // This preserves pre-fetched counts until Claude connects
+          if (connectedServer.toolCount !== undefined && connectedServer.toolCount > 0) {
+            server.toolCount = connectedServer.toolCount;
+          }
+          if (connectedServer.promptCount !== undefined && connectedServer.promptCount > 0) {
+            server.promptCount = connectedServer.promptCount;
+          }
         }
       });
       

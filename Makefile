@@ -19,7 +19,7 @@ NC = \033[0m # No Color
 .DEFAULT_GOAL := help
 
 # Phony targets
-.PHONY: help install compile build-webview build package clean dev watch test lint all quick-package release \
+.PHONY: help install compile build-extension build-webview build package clean dev watch test lint all quick-package release \
         check-tools install-local version bump-patch bump-minor bump-major reinstall quick-reinstall
 
 ## Help command
@@ -68,6 +68,12 @@ compile:
 	@npm run compile
 	@echo "$(GREEN)✓ TypeScript compiled$(NC)"
 
+## Build extension with webpack
+build-extension:
+	@echo "$(BLUE)Building extension with webpack...$(NC)"
+	@npm run build:extension
+	@echo "$(GREEN)✓ Extension bundled$(NC)"
+
 ## Build webview
 build-webview:
 	@echo "$(BLUE)Building webview...$(NC)"
@@ -75,7 +81,7 @@ build-webview:
 	@echo "$(GREEN)✓ Webview built$(NC)"
 
 ## Full build
-build: compile build-webview
+build: build-extension build-webview
 	@echo "$(GREEN)✓ Build complete$(NC)"
 
 ## Create VSIX package

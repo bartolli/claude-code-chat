@@ -11,6 +11,7 @@ import { ChunkedJSONParser } from './ChunkedJSONParser';
 import { ClaudeStreamMessage } from '../types/claude';
 import { Readable } from 'stream';
 import { mcpService } from './McpService';
+import { mcpClientService } from './McpClientService';
 
 /**
  * Simplified ExtensionMessageHandler for compilation
@@ -1050,13 +1051,20 @@ export class ExtensionMessageHandler {
             this.outputChannel.appendLine(`[MCP] Loading ALL MCP servers from configuration...`);
             this.outputChannel.appendLine(`[MCP] Working directory: ${cwd}`);
             
-            // Load ALL servers from .mcp.json
-            const mcpConfig = await mcpService.loadMcpConfig(cwd);
-            if (!mcpConfig || !mcpConfig.mcpServers) {
-                this.outputChannel.appendLine(`[MCP] No .mcp.json found or no servers configured`);
+            // Load ALL servers from all scopes (user, project, local)
+            const configs = await mcpService.loadAllConfigs(cwd);
+            const mergedServers = mcpService.mergeConfigs(configs.local, configs.project, configs.user);
+            
+            if (mergedServers.length === 0) {
+                this.outputChannel.appendLine(`[MCP] No MCP servers configured in any scope`);
                 this.webviewProtocol?.post('mcp/status', { servers: [] });
                 return;
             }
+            
+            this.outputChannel.appendLine(`[MCP] Found servers from scopes:`);
+            this.outputChannel.appendLine(`[MCP]   - User: ${configs.user?.mcpServers ? Object.keys(configs.user.mcpServers).length : 0} servers`);
+            this.outputChannel.appendLine(`[MCP]   - Project: ${configs.project?.mcpServers ? Object.keys(configs.project.mcpServers).length : 0} servers`);
+            this.outputChannel.appendLine(`[MCP]   - Local: ${configs.local?.mcpServers ? Object.keys(configs.local.mcpServers).length : 0} servers`);
             
             // Load Claude settings to get enabled/disabled servers
             const localSettingsPath = path.join(cwd, '.claude', 'settings.local.json');
@@ -1076,27 +1084,46 @@ export class ExtensionMessageHandler {
                 this.outputChannel.appendLine(`[MCP] Failed to read settings: ${error}`);
             }
             
-            // Create server list with enabled status
-            const servers = Object.entries(mcpConfig.mcpServers).map(([name, config]) => {
-                const isEnabled = enabledServers.includes(name) || 
-                                 (!disabledServers.includes(name) && enabledServers.length === 0);
+            // Create server list with enabled status from merged configs
+            const servers = mergedServers.map(server => {
+                const isEnabled = enabledServers.includes(server.name) || 
+                                 (!disabledServers.includes(server.name) && enabledServers.length === 0);
                 return {
-                    name,
+                    name: server.name,
                     status: 'disconnected' as const,
                     enabled: isEnabled,
                     toolCount: 0,
                     promptCount: 0,
-                    command: config.command,
-                    args: config.args
+                    command: server.command,
+                    args: server.args,
+                    env: server.env,
+                    scope: server.scope
                 };
             });
             
-            this.outputChannel.appendLine(`[MCP] Found ${servers.length} total servers`);
+            this.outputChannel.appendLine(`[MCP] Found ${servers.length} total servers after merging`);
             servers.forEach(server => {
-                this.outputChannel.appendLine(`[MCP]   - ${server.name} (${server.enabled ? 'enabled' : 'disabled'})`);
+                this.outputChannel.appendLine(`[MCP]   - ${server.name} (${server.scope}) - ${server.enabled ? 'enabled' : 'disabled'}`);
             });
             
-            // Send all servers to UI
+            // Query resources for enabled servers
+            this.outputChannel.appendLine(`[MCP] Querying resources for enabled servers...`);
+            for (const server of servers) {
+                if (server.enabled) {
+                    try {
+                        this.outputChannel.appendLine(`[MCP] Querying ${server.name}...`);
+                        const resources = await mcpClientService.queryServerResources(server);
+                        server.toolCount = resources.tools.length;
+                        server.promptCount = resources.prompts.length;
+                        this.outputChannel.appendLine(`[MCP]   - ${server.name}: ${server.toolCount} tools, ${server.promptCount} prompts`);
+                    } catch (error) {
+                        this.outputChannel.appendLine(`[MCP]   - ${server.name}: Failed to query - ${error}`);
+                        // Keep toolCount and promptCount as 0
+                    }
+                }
+            }
+            
+            // Send all servers to UI with resource counts
             this.webviewProtocol?.post('mcp/status', { servers });
             
         } catch (error) {

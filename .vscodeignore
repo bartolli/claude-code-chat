@@ -6,11 +6,14 @@ src/**
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/.eslintrc.json
-**/*.map
 **/*.ts
 **/.prettierrc.json
 node_modules/**
 gui/**
+webpack.*.js
+!out/extension.js
+!out/extension.js.map
+!out/webview/**
 .claude/**
 .claude-trace/**
 .github/**

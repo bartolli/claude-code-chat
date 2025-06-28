@@ -74,8 +74,18 @@ export function activate(context: vscode.ExtensionContext) {
     }
 }
 
-export function deactivate() {
+export async function deactivate() {
     console.log('STEP3: Deactivating');
+    
+    // Cleanup MCP client connections
+    try {
+        // Import is at the top, so we can use it directly
+        const { mcpClientService } = await import('./services/McpClientService.js');
+        await mcpClientService.disconnectAll();
+        console.log('STEP3: MCP client connections cleaned up');
+    } catch (error) {
+        console.error('STEP3: Error cleaning up MCP connections:', error);
+    }
 }
 
 // ClaudeChatProvider with optional ServiceContainer
