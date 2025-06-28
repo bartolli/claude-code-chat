@@ -26,7 +26,7 @@ const LumpDiv = styled.div`
 `;
 
 const LumpContent = styled.div`
-  padding: 0.125rem 0.25rem;
+  padding: 0.125rem 0.5rem;
 
   @media (min-width: 640px) {
     padding: 0.125rem 0.5rem;

@@ -19,16 +19,16 @@ import '../../styles/components/TipTapEditor.css';
 const EditorContainer = styled.div<{ isFocused: boolean; hasLump?: boolean }>`
     background-color: ${vscInputBackground};
     border: 1px solid ${props => props.isFocused ? vscCommandCenterActiveBorder : vscCommandCenterInactiveBorder};
-    border-radius: ${props => props.hasLump ? `0 0 ${defaultBorderRadius} ${defaultBorderRadius}` : defaultBorderRadius};
+    border-radius: ${props => props.hasLump ? `5px 5px ${defaultBorderRadius} ${defaultBorderRadius}` : defaultBorderRadius};
     display: flex;
     flex-direction: column;
-    min-height: 80px;
+    height: 90px;
     max-height: 70vh;
     transition: all 0.15s ease-in-out;
     color: ${vscForeground};
     font-size: var(--vscode-font-size);
     font-family: var(--vscode-font-family);
-    margin: ${props => props.hasLump ? '0 4px' : '0'};
+    margin: ${props => props.hasLump ? '0px 4px 4px 4px' : '0'};
 
     .ProseMirror {
         outline: none;

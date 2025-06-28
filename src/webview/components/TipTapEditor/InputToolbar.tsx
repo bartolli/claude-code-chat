@@ -9,7 +9,7 @@ const ToolbarContainer = styled.div`
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: 0.25rem 0.5rem;
     gap: 8px;
 `;
 
