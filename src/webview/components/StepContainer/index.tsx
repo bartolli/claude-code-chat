@@ -38,8 +38,8 @@ const ContentDiv = styled.div<{ fontSize?: number }>`
 
 const UserMessageDiv = styled.div`
     color: var(--vscode-descriptionForeground);
-    font-style: italic;
     padding: 8px 12px;
+    font-weight: 400;
     background-color: var(--vscode-editor-background);
     border-radius: 5px;
 `;

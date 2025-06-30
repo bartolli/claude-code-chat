@@ -9,25 +9,25 @@
 @property --clr-1 {
   syntax: "<color>";
   inherits: true;
-  initial-value: red;
+  initial-value: purple;
 }
 
 @property --clr-2 {
   syntax: "<color>";
   inherits: true;
-  initial-value: yellow;
+  initial-value: pink;
 }
 
 @property --clr-3 {
   syntax: "<color>";
   inherits: true;
-  initial-value: green;
+  initial-value: pink;
 }
 
 @property --clr-4 {
   syntax: "<color>";
   inherits: true;
-  initial-value: blue;
+  initial-value: pink;
 }
 
 @property --clr-5 {
@@ -44,10 +44,10 @@
 .glowing-border {
   --surface: var(--vscode-editor-background);
   --glow-size: 2px;
-  --border-width: 2px;
-  --gradient-glow: var(--clr-1), var(--clr-2), var(--clr-3), var(--clr-4),
-    var(--clr-5), var(--clr-1);
-  --glow-intensity: 0.5;
+  --border-width: 1px;
+  --gradient-glow: var(--surface), var(--surface), var(--surface), var(--clr-4),
+    var(--clr-4), var(--surface);
+  --glow-intensity: 1;
 
   /* margin-block: 3rem; */
   padding: 0;
@@ -61,7 +61,7 @@
   position: relative;
   isolation: isolate;
 
-  animation: glow 5s infinite linear;
+  animation: glow 6s infinite linear;
 }
 
 @keyframes glow {
@@ -80,14 +80,14 @@
 .glowing-border::before {
   z-index: -1;
   background: var(--surface, canvas);
-  inset: 6px; /* 1rem */
+  inset: 4px; /* 1rem */
   /* scale: 1.2 1; */
   filter: blur(var(--glow-size, 3px));
 }
 
 .glowing-border::after {
   z-index: -2;
-  inset: -3px; /* -1.5rem */
+  inset: -2px; /* -1.5rem */
   background: conic-gradient(from var(--glow-deg), var(--gradient-glow));
   filter: blur(var(--glow-size, 3px));
   opacity: var(--glow-intensity, 0.125);
