@@ -40,7 +40,7 @@ const UserMessageDiv = styled.div`
     color: var(--vscode-descriptionForeground);
     font-style: italic;
     padding: 8px 12px;
-    background-color: var(--vscode-input-background);
+    background-color: var(--vscode-editor-background);
     border-radius: 5px;
 `;
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
-import { ChevronDownIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { 
     vscInputBackground, 
     vscForeground, 
@@ -54,10 +54,21 @@ const ModelOption = styled.div<{ isSelected: boolean }>`
     cursor: pointer;
     color: ${vscForeground};
     background-color: ${props => props.isSelected ? vscListActiveBackground : 'transparent'};
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     
     &:hover {
         background-color: var(--vscode-list-hoverBackground);
     }
+`;
+
+const CheckIconStyled = styled(CheckIcon)`
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--vscode-charts-green, #89d185);
 `;
 
 interface ModelSelectorProps {
@@ -111,7 +122,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                             isSelected={model.id === selectedModelId}
                             onClick={() => handleSelect(model.id)}
                         >
-                            {model.name}
+                            <span>{model.name}</span>
+                            {model.id === selectedModelId && <CheckIconStyled />}
                         </ModelOption>
                     ))}
                 </DropdownContainer>
