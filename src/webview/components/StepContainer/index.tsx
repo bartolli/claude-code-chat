@@ -6,6 +6,7 @@ import { StyledMarkdownPreview } from '../StyledMarkdownPreview';
 import { ResponseActions } from './ResponseActions';
 import { ThinkingIndicator } from '../ThinkingIndicator';
 import { ToolUseDisplay } from '../ToolUseDisplay';
+import { ToolTreeView } from '../ToolTreeView';
 import { GradientBorder } from './GradientBorder';
 
 interface StepContainerProps {
@@ -17,6 +18,15 @@ interface StepContainerProps {
     onDelete?: () => void;
     onContinue?: () => void;
     thinking?: string;
+    thinkingDuration?: number;
+    isThinkingActive?: boolean;
+    currentThinkingLine?: string;
+    tokenUsage?: {
+        input: number;
+        output: number;
+        cache: number;
+        thinking: number;
+    };
     toolUses?: Array<{
         toolName: string;
         toolId: string;
@@ -53,9 +63,22 @@ export const StepContainer: React.FC<StepContainerProps> = ({
     onDelete,
     onContinue,
     thinking,
+    thinkingDuration,
+    isThinkingActive,
+    currentThinkingLine,
+    tokenUsage,
     toolUses
 }) => {
-    console.log(`[StepContainer] Rendering message ${index}:`, { role, content: content?.substring(0, 50), contentLength: content?.length });
+    console.log(`[StepContainer] Rendering message ${index}:`, { 
+        role, 
+        content: content?.substring(0, 50), 
+        contentLength: content?.length,
+        thinking: thinking?.substring(0, 50),
+        thinkingLength: thinking?.length,
+        isThinkingActive,
+        thinkingDuration,
+        thinkingTokens: tokenUsage?.thinking
+    });
     const [isTruncated, setIsTruncated] = useState(false);
 
     // Check if message appears truncated
@@ -90,26 +113,22 @@ export const StepContainer: React.FC<StepContainerProps> = ({
                     </GradientBorder>
                 ) : (
                     <>
-                        {/* Show thinking if available */}
-                        {thinking && (
+                        {/* Show thinking if available or in progress */}
+                        {(thinking || isThinkingActive) && (
                             <ThinkingIndicator 
                                 content={thinking}
-                                isExpanded={true}
+                                currentLine={currentThinkingLine}
+                                defaultExpanded={true}
+                                duration={thinkingDuration}
+                                isActive={isThinkingActive}
+                                tokenCount={tokenUsage?.thinking}
                             />
                         )}
                         
                         {/* Show tool uses if available */}
-                        {toolUses && toolUses.map((tool, toolIndex) => (
-                            <ToolUseDisplay
-                                key={tool.toolId}
-                                toolName={tool.toolName}
-                                input={tool.input}
-                                result={tool.result}
-                                status={tool.result ? 'complete' : 'calling'}
-                                isError={tool.isError}
-                                defaultExpanded={false}
-                            />
-                        ))}
+                        {toolUses && toolUses.length > 0 && (
+                            <ToolTreeView toolUses={toolUses} />
+                        )}
                         
                         {/* Show content */}
                         <StyledMarkdownPreview

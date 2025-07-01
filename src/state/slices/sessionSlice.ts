@@ -265,8 +265,13 @@ const sessionSlice = createSlice({
       }
     },
     
-    thinkingUpdated: (state, action: PayloadAction<{ content: string; isActive: boolean }>) => {
-      console.log('[sessionSlice] thinkingUpdated:', action.payload);
+    thinkingUpdated: (state, action: PayloadAction<{ content: string; currentLine?: string; isActive: boolean; duration?: number }>) => {
+      console.log('[sessionSlice] thinkingUpdated:', {
+        content: action.payload.content?.substring(0, 50),
+        currentLine: action.payload.currentLine,
+        isActive: action.payload.isActive,
+        duration: action.payload.duration
+      });
       if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
       
       const session = state.sessions[state.currentSessionId];
@@ -281,7 +286,72 @@ const sessionSlice = createSlice({
         }
       }
       if (lastAssistantIndex >= 0) {
-        messages[lastAssistantIndex].thinking = action.payload.content;
+        // Update thinking content (backend already accumulates)
+        if (action.payload.content !== undefined) {
+          messages[lastAssistantIndex].thinking = action.payload.content;
+        }
+        if (action.payload.duration !== undefined) {
+          messages[lastAssistantIndex].thinkingDuration = action.payload.duration;
+        }
+        if (action.payload.currentLine !== undefined) {
+          messages[lastAssistantIndex].currentThinkingLine = action.payload.currentLine;
+        }
+        // Store thinking active state
+        messages[lastAssistantIndex].isThinkingActive = action.payload.isActive;
+        
+        console.log('[sessionSlice] Updated message thinking state:', {
+          index: lastAssistantIndex,
+          isThinkingActive: messages[lastAssistantIndex].isThinkingActive,
+          thinkingDuration: messages[lastAssistantIndex].thinkingDuration,
+          contentLength: messages[lastAssistantIndex].thinking?.length
+        });
+        
+        // Ensure activeSession is updated too with new reference for React
+        if (state.activeSession?.id === state.currentSessionId) {
+          state.activeSession = {
+            ...state.activeSession,
+            messages: [...state.activeSession.messages]
+          };
+          state.activeSession.messages[lastAssistantIndex] = { ...messages[lastAssistantIndex] };
+          console.log('[sessionSlice] Updated activeSession thinking state');
+        }
+      }
+    },
+    
+    tokenUsageUpdated: (state, action: PayloadAction<{
+      inputTokens: number;
+      outputTokens: number;
+      thinkingTokens?: number;
+      cacheTokens?: number;
+    }>) => {
+      console.log('[sessionSlice] tokenUsageUpdated:', action.payload);
+      if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
+      
+      const session = state.sessions[state.currentSessionId];
+      const messages = session.messages;
+      
+      // Find the last assistant message to attach token usage
+      let lastAssistantIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant') {
+          lastAssistantIndex = i;
+          break;
+        }
+      }
+      
+      if (lastAssistantIndex >= 0) {
+        const message = messages[lastAssistantIndex];
+        // Store token usage on the message
+        message.tokenUsage = {
+          input: action.payload.inputTokens,
+          output: action.payload.outputTokens,
+          cache: action.payload.cacheTokens || 0,
+          thinking: action.payload.thinkingTokens || 0
+        };
+        
+        // Also update session totals
+        session.totalInputTokens = (session.totalInputTokens || 0) + action.payload.inputTokens;
+        session.totalOutputTokens = (session.totalOutputTokens || 0) + action.payload.outputTokens;
       }
     },
     
@@ -330,6 +400,7 @@ const sessionSlice = createSlice({
       result: string;
       isError?: boolean;
       status: string;
+      parentToolUseId?: string;
     }>) => {
       console.log('[sessionSlice] toolResultAdded:', action.payload);
       if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
@@ -345,6 +416,11 @@ const sessionSlice = createSlice({
           if (toolUse) {
             toolUse.result = action.payload.result;
             toolUse.isError = action.payload.isError;
+            
+            // Store parent tool use ID if provided
+            if (action.payload.parentToolUseId) {
+              toolUse.parentToolUseId = action.payload.parentToolUseId;
+            }
             
             // Update activeSession to trigger re-render
             if (state.activeSession?.id === state.currentSessionId) {
@@ -376,6 +452,7 @@ export const {
   messageUpdated,
   messageCompleted,
   thinkingUpdated,
+  tokenUsageUpdated,
   toolUseAdded,
   toolResultAdded
 } = sessionSlice.actions;

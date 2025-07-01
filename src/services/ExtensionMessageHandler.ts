@@ -25,6 +25,9 @@ export class ExtensionMessageHandler {
     private currentSessionId: string | null = null;
     private currentClaudeProcess: cp.ChildProcess | null = null;
     private pendingPermissionResponses: Map<string, (response: string) => void> = new Map();
+    private thinkingStartTime: number | null = null;
+    private accumulatedThinking: string = '';
+    private latestThinkingLine: string = '';
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -707,6 +710,7 @@ export class ExtensionMessageHandler {
                 
             case 'assistant':
                 this.outputChannel.appendLine(`[JSON] Assistant message received`);
+                this.outputChannel.appendLine(`[DEBUG] Message structure: ${JSON.stringify(json.message, null, 2).substring(0, 500)}...`);
                 
                 // Ensure we have an assistant message to attach tools/thinking to
                 if (!streamingState.isStreaming && json.message?.content) {
@@ -716,6 +720,20 @@ export class ExtensionMessageHandler {
                         role: 'assistant',
                         content: ''
                     });
+                    
+                    // Check if this message contains thinking
+                    const hasThinking = Array.isArray(json.message.content) && 
+                        json.message.content.some((block: any) => block.type === 'thinking');
+                    if (hasThinking && !this.thinkingStartTime) {
+                        this.thinkingStartTime = Date.now();
+                        // Reset accumulated thinking for new message
+                        this.accumulatedThinking = '';
+                        this.latestThinkingLine = '';
+                        // Send initial thinking indicator to show it's active
+                        this.webviewProtocol?.post('message/thinking', {
+                            isActive: true
+                        });
+                    }
                 }
                 
                 // Handle assistant messages from SDK format
@@ -729,11 +747,31 @@ export class ExtensionMessageHandler {
                                 onContent(block.text);
                             } else if (block.type === 'thinking' && block.thinking) {
                                 this.outputChannel.appendLine(`[JSON] Thinking content: ${block.thinking.substring(0, 50)}...`);
+                                // Track thinking start time
+                                if (!this.thinkingStartTime) {
+                                    this.thinkingStartTime = Date.now();
+                                    this.outputChannel.appendLine(`[DEBUG] Thinking started at: ${this.thinkingStartTime}`);
+                                }
+                                
+                                // Accumulate thinking content
+                                this.accumulatedThinking += block.thinking;
+                                
+                                // Extract last line for header display
+                                const lines = this.accumulatedThinking.split('\n');
+                                this.latestThinkingLine = lines[lines.length - 1] || lines[lines.length - 2] || '';
+                                
                                 // Send thinking update to UI
-                                this.webviewProtocol?.post('message/thinking', {
-                                    content: block.thinking,
-                                    isActive: true
-                                });
+                                this.outputChannel.appendLine(`[DEBUG] webviewProtocol status: ${this.webviewProtocol ? 'available' : 'not available'}`);
+                                if (this.webviewProtocol) {
+                                    this.outputChannel.appendLine(`[DEBUG] Sending thinking update to UI`);
+                                    this.webviewProtocol.post('message/thinking', {
+                                        content: this.accumulatedThinking,
+                                        currentLine: this.latestThinkingLine,
+                                        isActive: true
+                                    });
+                                } else {
+                                    this.outputChannel.appendLine(`[ERROR] Cannot send thinking update - webviewProtocol not available`);
+                                }
                             } else if (block.type === 'tool_use') {
                                 this.outputChannel.appendLine(`[JSON] Tool use: ${block.name} with id: ${block.id}`);
                                 // Send tool use update to UI
@@ -752,6 +790,20 @@ export class ExtensionMessageHandler {
                 }
                 if (json.message?.id) {
                     onMetadata({ messageId: json.message.id });
+                }
+                
+                // Track and send token usage if available
+                if (json.message?.usage) {
+                    this.outputChannel.appendLine(`[JSON] Token usage - input: ${json.message.usage.input_tokens}, output: ${json.message.usage.output_tokens}, thinking: ${json.message.usage.thinking_tokens || 0}`);
+                    
+                    // Send token usage update to UI
+                    this.webviewProtocol?.post('message/tokenUsage', {
+                        inputTokens: json.message.usage.input_tokens,
+                        outputTokens: json.message.usage.output_tokens,
+                        cacheTokens: (json.message.usage.cache_creation_input_tokens || 0) + 
+                                     (json.message.usage.cache_read_input_tokens || 0),
+                        thinkingTokens: json.message.usage.thinking_tokens || 0
+                    });
                 }
                 break;
                 
@@ -780,7 +832,8 @@ export class ExtensionMessageHandler {
                                 toolId: block.tool_use_id,
                                 result: resultText,
                                 isError: block.is_error,
-                                status: 'complete'
+                                status: 'complete',
+                                parentToolUseId: json.parent_tool_use_id || undefined
                             });
                         }
                     }
@@ -795,6 +848,38 @@ export class ExtensionMessageHandler {
                     this.webviewProtocol?.post('error/show', {
                         message: `Claude error: ${json.subtype}`
                     });
+                }
+                
+                // Check if result message contains thinking tokens
+                if (json.usage?.thinking_tokens) {
+                    this.outputChannel.appendLine(`[DEBUG] Result contains thinking tokens: ${json.usage.thinking_tokens}`);
+                    // Send final token usage update with thinking tokens
+                    this.webviewProtocol?.post('message/tokenUsage', {
+                        inputTokens: json.usage.input_tokens || 0,
+                        outputTokens: json.usage.output_tokens || 0,
+                        cacheTokens: (json.usage.cache_creation_input_tokens || 0) + 
+                                     (json.usage.cache_read_input_tokens || 0),
+                        thinkingTokens: json.usage.thinking_tokens
+                    });
+                }
+                
+                // If we were tracking thinking, send final update with duration
+                if (this.thinkingStartTime) {
+                    const thinkingDuration = (Date.now() - this.thinkingStartTime) / 1000; // Convert to seconds
+                    this.outputChannel.appendLine(`[DEBUG] Thinking completed. Duration: ${thinkingDuration}s`);
+                    
+                    // Send final thinking update with duration and accumulated content
+                    this.webviewProtocol?.post('message/thinking', {
+                        content: this.accumulatedThinking,
+                        currentLine: this.latestThinkingLine,
+                        isActive: false,
+                        duration: thinkingDuration
+                    });
+                    
+                    // Reset thinking state
+                    this.thinkingStartTime = null;
+                    this.accumulatedThinking = '';
+                    this.latestThinkingLine = '';
                 }
                 
                 // Send completion message

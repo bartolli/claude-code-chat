@@ -176,6 +176,16 @@ export const App: React.FC<AppProps> = ({ messenger }) => {
         );
 
         unsubscribers.push(
+            messenger.on('message/tokenUsage', (data) => {
+                // Handle token usage updates
+                dispatch({
+                    type: 'session/tokenUsageUpdated',
+                    payload: data
+                });
+            })
+        );
+
+        unsubscribers.push(
             messenger.on('permission/request', (data) => {
                 // Handle permission requests
                 dispatch({

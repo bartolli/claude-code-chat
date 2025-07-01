@@ -11,6 +11,7 @@ import {
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { vscForeground, vscEditorBackground, defaultBorderRadius } from '../styled';
+import { TodoListFormatter } from './TodoListFormatter';
 
 const ToolContainer = styled.div`
   margin: 8px 0;
@@ -153,6 +154,11 @@ export const ToolUseDisplay: React.FC<ToolUseDisplayProps> = ({
   defaultExpanded = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  
+  // Update expansion state when defaultExpanded changes
+  React.useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [defaultExpanded]);
   const [showFullResult, setShowFullResult] = useState(false);
   
   const handleToggle = () => setIsExpanded(!isExpanded);
@@ -189,6 +195,10 @@ export const ToolUseDisplay: React.FC<ToolUseDisplayProps> = ({
     ? result.substring(0, 500) + '...'
     : result;
   
+  // Check if this is a TodoWrite tool with todos input
+  const isTodoWrite = toolName === 'TodoWrite' && input?.todos;
+  const todoList = isTodoWrite ? input.todos : null;
+  
   return (
     <ToolContainer>
       <ToolHeader onClick={handleToggle} isExpanded={isExpanded}>
@@ -201,9 +211,13 @@ export const ToolUseDisplay: React.FC<ToolUseDisplayProps> = ({
       {isExpanded && (
         <ToolContent>
           {input && (
-            <ToolInput>
-              <pre>{String(formatInput(input))}</pre>
-            </ToolInput>
+            isTodoWrite && todoList ? (
+              <TodoListFormatter todos={todoList} />
+            ) : (
+              <ToolInput>
+                <pre>{String(formatInput(input))}</pre>
+              </ToolInput>
+            )
           )}
           
           {result && (

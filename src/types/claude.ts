@@ -62,8 +62,18 @@ export interface ClaudeMessage {
     input: any;
     result?: string;
     isError?: boolean;
+    parentToolUseId?: string;
   }>;
   thinking?: string;
+  thinkingDuration?: number;
+  isThinkingActive?: boolean;
+  currentThinkingLine?: string;
+  tokenUsage?: {
+    input: number;
+    output: number;
+    cache: number;
+    thinking: number;
+  };
 }
 
 export interface ToolUse {
@@ -115,6 +125,7 @@ export interface ClaudeAssistantMessage {
       output_tokens: number;
       cache_creation_input_tokens?: number;
       cache_read_input_tokens?: number;
+      thinking_tokens?: number;
       service_tier?: string;
     };
   };
@@ -153,6 +164,7 @@ export interface ClaudeResultMessage {
     cache_creation_input_tokens?: number;
     cache_read_input_tokens?: number;
     output_tokens: number;
+    thinking_tokens?: number;
     server_tool_use?: {
       web_search_requests?: number;
     };

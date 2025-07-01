@@ -9,7 +9,7 @@ import { ChatHeader } from './ChatHeader';
 import { ModelOption } from './ModelSelector';
 import { EmptyChatBody } from './EmptyChatBody';
 import { PermissionPrompt } from './PermissionPrompt';
-import { WaitingIndicator } from './WaitingIndicator';
+import { ThinkingIndicator } from './ThinkingIndicator';
 import { selectCurrentSession } from '../../state/slices/sessionSlice';
 import { selectIsProcessing } from '../../state/slices/claudeSlice';
 import { selectAvailableModels, selectSelectedModelId, setSelectedModel } from '../../state/slices/configSlice';
@@ -83,12 +83,16 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
     // Check if we should show waiting indicator
     // Show it when processing and either:
     // 1. Last message is from user (no assistant response yet)
-    // 2. Last message is empty assistant with no content AND no tool uses
+    // 2. Last message is empty assistant with no content, no tool uses, and no thinking
     const lastMessage = messages[messages.length - 1];
     const showWaitingIndicator = isProcessing && 
         messages.length > 0 && 
         (lastMessage?.role === 'user' || 
-         (lastMessage?.role === 'assistant' && !lastMessage.content && !lastMessage.toolUses?.length));
+         (lastMessage?.role === 'assistant' && 
+          !lastMessage.content && 
+          !lastMessage.toolUses?.length && 
+          !lastMessage.thinking && 
+          !lastMessage.isThinkingActive));
     
     // Auto scroll to bottom when new messages arrive or waiting indicator appears
     useEffect(() => {
@@ -179,16 +183,23 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                                             onDelete={() => console.log('Delete message', index)}
                                             onContinue={() => console.log('Continue generation')}
                                             thinking={msg.thinking}
+                                            thinkingDuration={msg.thinkingDuration}
+                                            isThinkingActive={msg.isThinkingActive}
+                                            currentThinkingLine={msg.currentThinkingLine}
+                                            tokenUsage={msg.tokenUsage}
                                             toolUses={msg.toolUses}
                                         />
                                     </MessageContainer>
                                 );
                             })}
                             
-                            {/* Show waiting indicator when Claude is processing */}
+                            {/* Show thinking indicator when Claude is processing */}
                             {showWaitingIndicator && (
                                 <MessageContainer>
-                                    <WaitingIndicator />
+                                    <ThinkingIndicator 
+                                        isActive={true}
+                                        defaultExpanded={true}
+                                    />
                                 </MessageContainer>
                             )}
                             

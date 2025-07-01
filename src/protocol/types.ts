@@ -196,7 +196,9 @@ export interface ToWebviewProtocol {
     }];
     'message/thinking': [void, {
         content: string;
+        currentLine?: string;
         isActive: boolean;
+        duration?: number;
     }];
     'message/toolUse': [void, {
         toolName: string;
@@ -209,11 +211,18 @@ export interface ToWebviewProtocol {
         result: string;
         isError?: boolean;
         status: string;
+        parentToolUseId?: string;
     }];
     'chat/messageComplete': [void, {
         sessionId?: string;
         totalCost?: number;
         duration?: number;
+    }];
+    'message/tokenUsage': [void, {
+        inputTokens: number;
+        outputTokens: number;
+        thinkingTokens?: number;
+        cacheTokens?: number;
     }];
 }
 
