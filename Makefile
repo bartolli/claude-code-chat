@@ -20,7 +20,8 @@ NC = \033[0m # No Color
 
 # Phony targets
 .PHONY: help install compile build-extension build-webview build package clean dev watch test lint all quick-package release \
-        check-tools install-local version bump-patch bump-minor bump-major reinstall quick-reinstall
+        check-tools install-local version bump-patch bump-minor bump-major reinstall quick-reinstall \
+        dev-build dev-package dev-reinstall
 
 ## Help command
 help:
@@ -37,6 +38,7 @@ help:
 	@echo "  make watch          - Watch TypeScript files"
 	@echo "  make test           - Run tests"
 	@echo "  make lint           - Run linter"
+	@echo "  make dev-reinstall  - Build and install with debug features"
 	@echo ""
 	@echo "$(GREEN)Quick Commands:$(NC)"
 	@echo "  make quick-package  - Build and package without reinstalling"
@@ -191,3 +193,40 @@ bump-major:
 	@echo "$(BLUE)Bumping major version...$(NC)"
 	@npm version major
 	@echo "$(GREEN)✓ Version bumped to $$(node -p \"require('./package.json').version\")$(NC)"
+
+## Development build with debug options
+dev-build:
+	@echo "$(BLUE)Building extension in development mode with source maps...$(NC)"
+	@echo "$(YELLOW)→ Using development webpack config$(NC)"
+	@npx webpack --config webpack.dev.config.js
+	@echo "$(YELLOW)→ Building webview in development mode$(NC)"
+	@npx webpack --mode development --devtool source-map
+	@echo "$(GREEN)✓ Development build complete with source maps$(NC)"
+	@echo "$(YELLOW)→ Source maps generated in out/ directory$(NC)"
+
+## Create debug package
+dev-package: dev-build
+	@echo "$(BLUE)Creating debug VSIX package...$(NC)"
+	@rm -f *.vsix
+	@npx vsce package --no-dependencies --allow-missing-repository
+	@echo "$(GREEN)✓ Debug package created: $(VSIX_FILE)$(NC)"
+	@ls -lh $(VSIX_FILE)
+
+## Development reinstall with full debugging
+dev-reinstall: dev-package
+	@echo "$(BLUE)Installing development build...$(NC)"
+	@code --uninstall-extension $(EXTENSION_ID) || echo "$(YELLOW)Extension not currently installed$(NC)"
+	@code --install-extension $(VSIX_FILE) --force
+	@echo "$(GREEN)✓ Development extension installed$(NC)"
+	@echo "$(YELLOW)⚡ Debug features enabled:$(NC)"
+	@echo "  - Inline source maps for better stack traces"
+	@echo "  - Non-minified code for easier debugging"
+	@echo "  - Full webpack bundle analysis available"
+	@echo ""
+	@echo "$(YELLOW)📝 To debug the extension:$(NC)"
+	@echo "  1. Open VS Code Developer Tools: Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux)"
+	@echo "  2. Go to Sources tab to see source-mapped TypeScript files"
+	@echo "  3. Set breakpoints directly in TypeScript code"
+	@echo "  4. Check Console for detailed error messages"
+	@echo ""
+	@echo "$(YELLOW)Please reload VS Code window (Cmd+R or Ctrl+R) to activate$(NC)"

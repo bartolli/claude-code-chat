@@ -9,12 +9,12 @@ Claude Code offers a variety of settings to configure its behavior to meet your 
 The `settings.json` file is our official mechanism for configuring Claude
 Code through hierarchical settings:
 
-* **User settings** are defined in `~/.claude/settings.json` and apply to all
+- **User settings** are defined in `~/.claude/settings.json` and apply to all
   projects.
-* **Project settings** are saved in your project directory:
-  * `.claude/settings.json` for settings that are checked into source control and shared with your team
-  * `.claude/settings.local.json` for settings that are not checked in, useful for personal preferences and experimentation. Claude Code will configure git to ignore `.claude/settings.local.json` when it is created.
-* For enterprise deployments of Claude Code, we also support **enterprise
+- **Project settings** are saved in your project directory:
+  - `.claude/settings.json` for settings that are checked into source control and shared with your team
+  - `.claude/settings.local.json` for settings that are not checked in, useful for personal preferences and experimentation. Claude Code will configure git to ignore `.claude/settings.local.json` when it is created.
+- For enterprise deployments of Claude Code, we also support **enterprise
   managed policy settings**. These take precedence over user and project
   settings. System administrators can deploy policies to
   `/Library/Application Support/ClaudeCode/managed-settings.json` on macOS and
@@ -60,7 +60,6 @@ Code through hierarchical settings:
 | `additionalDirectories`        | Additional [working directories](iam#working-directories) that Claude has access to                                                                | `[ "../docs/" ]`                 |
 | `defaultMode`                  | Default [permission mode](iam#permission-modes) when opening Claude Code                                                                           | `"allowEdits"`                   |
 | `disableBypassPermissionsMode` | Set to `"disable"` to prevent `bypassPermissions` mode from being activated. See [managed policy settings](iam#enterprise-managed-policy-settings) | `"disable"`                      |
-| `forceLoginMethod`             | Use `claudeai` to restrict login to subscription plans only, `console` to restrict login to Anthropic Console (API usage billing) accounts only    | `claudeai`                       |
 
 ### Settings precedence
 
@@ -119,11 +118,11 @@ We are in the process of migrating global configuration to `settings.json`.
 
 To manage your configurations, use the following commands:
 
-* List settings: `claude config list`
-* See a setting: `claude config get <key>`
-* Change a setting: `claude config set <key> <value>`
-* Push to a setting (for lists): `claude config add <key> <value>`
-* Remove from a setting (for lists): `claude config remove <key> <value>`
+- List settings: `claude config list`
+- See a setting: `claude config get <key>`
+- Change a setting: `claude config set <key> <value>`
+- Push to a setting (for lists): `claude config add <key> <value>`
+- Remove from a setting (for lists): `claude config remove <key> <value>`
 
 By default `config` changes your project configuration. To manage your global configuration, use the `--global` (or `-g`) flag.
 
@@ -162,8 +161,17 @@ Claude Code has access to a set of powerful tools that help it understand and mo
 
 Permission rules can be configured using `/allowed-tools` or in [permission settings](/en/docs/claude-code/settings#available-settings).
 
+### Extending tools with hooks
+
+You can run custom commands before or after any tool executes using
+[Claude Code hooks](/en/docs/claude-code/hooks).
+
+For example, you could automatically run a Python formatter after Claude
+modifies Python files, or prevent modifications to production configuration
+files by blocking Write operations to certain paths.
+
 ## See also
 
-* [Identity and Access Management](/en/docs/claude-code/iam#configuring-permissions) - Learn about Claude Code's permission system
-* [IAM and access control](/en/docs/claude-code/iam#enterprise-managed-policy-settings) - Enterprise policy management
-* [Troubleshooting](/en/docs/claude-code/troubleshooting#auto-updater-issues) - Solutions for common configuration issues
+- [Identity and Access Management](/en/docs/claude-code/iam#configuring-permissions) - Learn about Claude Code's permission system
+- [IAM and access control](/en/docs/claude-code/iam#enterprise-managed-policy-settings) - Enterprise policy management
+- [Troubleshooting](/en/docs/claude-code/troubleshooting#auto-updater-issues) - Solutions for common configuration issues

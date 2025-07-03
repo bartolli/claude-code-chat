@@ -21,8 +21,8 @@ To use the Claude Code SDK directly with Anthropic's API, we recommend creating 
 
 The SDK also supports third-party API providers:
 
-* **Amazon Bedrock**: Set `CLAUDE_CODE_USE_BEDROCK=1` environment variable and configure AWS credentials
-* **Google Vertex AI**: Set `CLAUDE_CODE_USE_VERTEX=1` environment variable and configure Google Cloud credentials
+- **Amazon Bedrock**: Set `CLAUDE_CODE_USE_BEDROCK=1` environment variable and configure AWS credentials
+- **Google Vertex AI**: Set `CLAUDE_CODE_USE_VERTEX=1` environment variable and configure Google Cloud credentials
 
 For detailed configuration instructions for third-party providers, see the [Amazon Bedrock](/en/docs/claude-code/amazon-bedrock) and [Google Vertex AI](/en/docs/claude-code/google-vertex-ai) documentation.
 
@@ -53,12 +53,12 @@ $ claude -p "Build a React component" --output-format stream-json
 The TypeScript SDK is included in the main [`@anthropic-ai/claude-code`](https://www.npmjs.com/package/@anthropic-ai/claude-code) package on NPM:
 
 ```ts
-import { query, type SDKMessage } from "@anthropic-ai/claude-code";
+import { query, type SDKMessage } from '@anthropic-ai/claude-code';
 
 const messages: SDKMessage[] = [];
 
 for await (const message of query({
-  prompt: "Write a haiku about foo.py",
+  prompt: 'Write a haiku about foo.py',
   abortController: new AbortController(),
   options: {
     maxTurns: 3,
@@ -90,9 +90,9 @@ pip install claude-code-sdk
 
 **Prerequisites:**
 
-* Python 3.10+
-* Node.js
-* Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+- Python 3.10+
+- Node.js
+- Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
 
 Basic usage:
 
@@ -102,13 +102,13 @@ from claude_code_sdk import query, ClaudeCodeOptions, Message
 
 async def main():
     messages: list[Message] = []
-    
+
     async for message in query(
         prompt="Write a haiku about foo.py",
         options=ClaudeCodeOptions(max_turns=3)
     ):
         messages.append(message)
-    
+
     print(messages)
 
 anyio.run(main)
@@ -187,11 +187,7 @@ Create a JSON configuration file with your MCP servers:
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/path/to/allowed/files"
-      ]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
     },
     "github": {
       "command": "npx",
@@ -226,14 +222,14 @@ $ claude -p "Deploy the application" \
 <Note>
   When using MCP tools, you must explicitly allow them using the `--allowedTools` flag. MCP tool names follow the pattern `mcp__<serverName>__<toolName>` where:
 
-  * `serverName` is the key from your MCP configuration file
-  * `toolName` is the specific tool provided by that server
+- `serverName` is the key from your MCP configuration file
+- `toolName` is the specific tool provided by that server
 
-  This security measure ensures that MCP tools are only used when explicitly permitted.
+This security measure ensures that MCP tools are only used when explicitly permitted.
 
-  If you specify just the server name (i.e., `mcp__<serverName>`), all tools from that server will be allowed.
+If you specify just the server name (i.e., `mcp__<serverName>`), all tools from that server will be allowed.
 
-  Glob patterns (e.g., `mcp__go*`) are not supported.
+Glob patterns (e.g., `mcp__go*`) are not supported.
 </Note>
 
 ### Custom permission prompt tool
@@ -263,31 +259,31 @@ For example, a TypeScript MCP permission prompt tool implementation might look l
 
 ```ts
 const server = new McpServer({
-  name: "Test permission prompt MCP Server",
-  version: "0.0.1",
+  name: 'Test permission prompt MCP Server',
+  version: '0.0.1',
 });
 
 server.tool(
-  "approval_prompt",
+  'approval_prompt',
   'Simulate a permission check - approve if the input contains "allow", otherwise deny',
   {
-    tool_name: z.string().describe("The tool requesting permission"),
-    input: z.object({}).passthrough().describe("The input for the tool"),
+    tool_name: z.string().describe('The tool requesting permission'),
+    input: z.object({}).passthrough().describe('The input for the tool'),
   },
   async ({ tool_name, input }) => {
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: JSON.stringify(
-            JSON.stringify(input).includes("allow")
+            JSON.stringify(input).includes('allow')
               ? {
-                  behavior: "allow",
+                  behavior: 'allow',
                   updatedInput: input,
                 }
               : {
-                  behavior: "deny",
-                  message: "Permission denied by test approval_prompt tool",
+                  behavior: 'deny',
+                  message: 'Permission denied by test approval_prompt tool',
                 }
           ),
         },
@@ -307,8 +303,8 @@ claude -p "..." \
 
 Usage notes:
 
-* Use `updatedInput` to tell the model that the permission prompt mutated its input; otherwise, set `updatedInput` to the original input, as in the example above. For example, if the tool shows a file edit diff to the user and lets them edit the diff manually, the permission prompt tool should return that updated edit.
-* The payload must be JSON-stringified
+- Use `updatedInput` to tell the model that the permission prompt mutated its input; otherwise, set `updatedInput` to the original input, as in the example above. For example, if the tool shows a file edit diff to the user and lets them edit the diff manually, the permission prompt tool should return that updated edit.
+- The payload must be JSON-stringified
 
 ## Available CLI options
 
@@ -386,22 +382,22 @@ Messages returned from the JSON API are strictly typed according to the followin
 type SDKMessage =
   // An assistant message
   | {
-      type: "assistant";
+      type: 'assistant';
       message: Message; // from Anthropic SDK
       session_id: string;
     }
 
   // A user message
   | {
-      type: "user";
+      type: 'user';
       message: MessageParam; // from Anthropic SDK
       session_id: string;
     }
 
   // Emitted as the last message
   | {
-      type: "result";
-      subtype: "success";
+      type: 'result';
+      subtype: 'success';
       duration_ms: float;
       duration_api_ms: float;
       is_error: boolean;
@@ -413,8 +409,8 @@ type SDKMessage =
 
   // Emitted as the last message, when we've reached the maximum number of turns
   | {
-      type: "result";
-      subtype: "error_max_turns" | "error_during_execution";
+      type: 'result';
+      subtype: 'error_max_turns' | 'error_during_execution';
       duration_ms: float;
       duration_api_ms: float;
       is_error: boolean;
@@ -425,8 +421,8 @@ type SDKMessage =
 
   // Emitted as the first message at the start of a conversation
   | {
-      type: "system";
-      subtype: "init";
+      type: 'system';
+      subtype: 'init';
       apiKeySource: string;
       cwd: string;
       session_id: string;
@@ -436,7 +432,7 @@ type SDKMessage =
         status: string;
       }[];
       model: string;
-      permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan";
+      permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
     };
 ```
 
@@ -564,6 +560,6 @@ The Claude Code SDK enables powerful integrations with your development workflow
 
 ## Related resources
 
-* [CLI usage and controls](/en/docs/claude-code/cli-reference) - Complete CLI documentation
-* [GitHub Actions integration](/en/docs/claude-code/github-actions) - Automate your GitHub workflow with Claude
-* [Common workflows](/en/docs/claude-code/common-workflows) - Step-by-step guides for common use cases
+- [CLI usage and controls](/en/docs/claude-code/cli-reference) - Complete CLI documentation
+- [GitHub Actions integration](/en/docs/claude-code/github-actions) - Automate your GitHub workflow with Claude
+- [Common workflows](/en/docs/claude-code/common-workflows) - Step-by-step guides for common use cases
