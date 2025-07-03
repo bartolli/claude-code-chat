@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import styled from 'styled-components';
 import { TipTapEditor } from '../TipTapEditor';
 import { Lump } from './Lump';
@@ -14,30 +14,50 @@ const Container = styled.div`
 
 interface ContinueInputBoxProps {
     onSubmit?: (message: string) => void;
+    onStop?: () => void;
     placeholder?: string;
     disabled?: boolean;
+    isProcessing?: boolean;
     messenger?: IIdeMessenger;
     isStreaming?: boolean;
     models?: Array<{ id: string; name: string }>;
     selectedModelId?: string;
     onModelChange?: (modelId: string) => void;
     isMainInput?: boolean;
+    planMode?: boolean;
+    onPlanModeChange?: (active: boolean) => void;
 }
 
-export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
+export interface ContinueInputBoxHandle {
+    focus: () => void;
+}
+
+export const ContinueInputBox = forwardRef<ContinueInputBoxHandle, ContinueInputBoxProps>(({
     onSubmit,
+    onStop,
     placeholder = "Ask Claude anything...",
     disabled = false,
+    isProcessing = false,
     messenger,
     isStreaming = false,
     models,
     selectedModelId,
     onModelChange,
-    isMainInput = true
-}) => {
+    isMainInput = true,
+    planMode = false,
+    onPlanModeChange
+}, ref) => {
     const [content, setContent] = useState('');
     const [isFocused, setIsFocused] = useState(false);
     const editorRef = useRef<Editor | null>(null);
+
+    useImperativeHandle(ref, () => ({
+        focus: () => {
+            if (editorRef.current) {
+                editorRef.current.commands.focus();
+            }
+        }
+    }), []);
 
     const handleSubmit = (text?: string) => {
         const messageText = text || content;
@@ -60,15 +80,23 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
         return Math.ceil(text.length / 4);
     };
 
+    const displayPlaceholder = disabled 
+        ? "Processing..." 
+        : planMode 
+            ? "Ask Claude to plan changes (Plan mode active)..." 
+            : placeholder;
+
     return (
         <Container>
             <Lump isMainInput={isMainInput} />
             <TipTapEditor
-                placeholder={disabled ? "Processing..." : placeholder}
+                placeholder={displayPlaceholder}
                 onSubmit={handleSubmit}
                 onUpdate={handleEditorUpdate}
+                onStop={onStop}
                 autoFocus={!disabled}
                 editable={!disabled}
+                isProcessing={isProcessing}
                 onAddContext={() => {
                     // TODO: Implement context menu
                     console.log('Add context clicked');
@@ -80,7 +108,9 @@ export const ContinueInputBox: React.FC<ContinueInputBoxProps> = ({
                 selectedModelId={selectedModelId}
                 onModelChange={onModelChange}
                 hasLump={isMainInput}
+                planMode={planMode}
+                onPlanModeChange={onPlanModeChange}
             />
         </Container>
     );
-};
+});

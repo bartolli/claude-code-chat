@@ -220,6 +220,17 @@ export const App: React.FC<AppProps> = ({ messenger }) => {
             })
         );
 
+        unsubscribers.push(
+            messenger.on('message/planProposal', (data) => {
+                // Handle plan proposal
+                console.log('[App.tsx] Received plan proposal:', data);
+                dispatch({
+                    type: 'ui/showPlanProposal',
+                    payload: data
+                });
+            })
+        );
+
         // Request initial data
         messenger.post('settings/get', undefined);
         messenger.post('conversation/getList', undefined);

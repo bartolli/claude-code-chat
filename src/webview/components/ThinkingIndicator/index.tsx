@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { ChevronRightIcon, LightBulbIcon, CogIcon } from '@heroicons/react/24/outline';
 import { vscForeground, vscEditorBackground } from '../styled';
@@ -9,6 +9,17 @@ const pulse = keyframes`
   50% { opacity: 1; }
 `;
 
+const fadeIn = keyframes`
+  from { 
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
 const ThinkingContainer = styled.div`
   margin: 8px 0;
   background-color: ${vscEditorBackground};
@@ -16,13 +27,15 @@ const ThinkingContainer = styled.div`
   border-radius: 4px;
   overflow: hidden;
   width: 100%; /* Establish width context */
+  animation: ${fadeIn} 0.3s ease-out;
+  transition: all 0.3s ease;
 `;
 
-const ThinkingHeader = styled.div<{ isExpanded: boolean }>`
+const ThinkingHeader = styled.div<{ isExpanded: boolean; isCollapsible: boolean }>`
   display: flex;
   align-items: center;
   padding: 8px 12px;
-  cursor: pointer;
+  cursor: ${props => props.isCollapsible ? 'pointer' : 'default'};
   user-select: none;
   transition: background-color 0.2s;
   width: 100%; /* Establish width context */
@@ -30,7 +43,7 @@ const ThinkingHeader = styled.div<{ isExpanded: boolean }>`
   overflow: hidden;
   
   &:hover {
-    background-color: var(--vscode-list-hoverBackground);
+    background-color: ${props => props.isCollapsible ? 'var(--vscode-list-hoverBackground)' : 'transparent'};
   }
   
   svg:first-child {
@@ -56,6 +69,7 @@ const ThinkingText = styled.span`
   font-size: 13px;
   flex-shrink: 0;
   white-space: nowrap;
+  transition: opacity 0.3s ease;
 `;
 
 const AnimatedDots = styled.span`
@@ -102,6 +116,24 @@ const HiddenMeasure = styled.span`
   font-size: 12px;
 `;
 
+// Fun processing messages that rotate
+const processingMessages = [
+  'Pondering',
+  'Diving deep',
+  'Analyzing',
+  'Contemplating',
+  'Processing',
+  'Exploring ideas',
+  'Connecting dots',
+  'Synthesizing',
+  'Brainstorming',
+  'Cogitating',
+  'Musing',
+  'Considering options',
+  'Gathering thoughts',
+  'Formulating response'
+];
+
 interface ThinkingIndicatorProps {
   content?: string;
   currentLine?: string;
@@ -109,20 +141,44 @@ interface ThinkingIndicatorProps {
   duration?: number;
   defaultExpanded?: boolean;
   tokenCount?: number;
+  responsePreview?: string; // First line of the actual response for completed state
 }
 
-export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
+export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = React.memo(({
   content,
   currentLine,
   isActive = false,
   duration,
   defaultExpanded = false,
-  tokenCount
+  tokenCount,
+  responsePreview
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   
-  // Use currentLine if available when active, otherwise use first line of content
-  const displayLine = isActive && currentLine ? currentLine : (content ? content.split('\n')[0].trim() : '');
+  // Rotate processing messages every 2.5 seconds
+  useEffect(() => {
+    if (isActive && !content) {
+      const interval = setInterval(() => {
+        setProcessingMessageIndex((prev) => (prev + 1) % processingMessages.length);
+      }, 2500);
+      return () => clearInterval(interval);
+    }
+  }, [isActive, content]);
+  
+  // Determine display line based on state
+  let displayLine = '';
+  if (!isActive && responsePreview) {
+    // Completed state: show first line of response
+    displayLine = responsePreview;
+  } else if (isActive && currentLine) {
+    // Active thinking: show current thought line
+    displayLine = currentLine;
+  } else if (content) {
+    // Fallback: show first line of thinking content
+    displayLine = content.split('\n')[0].trim();
+  }
+  
   const shouldShowPreview = !isExpanded && displayLine;
   
   const { truncatedText, containerRef, measureRef } = useTruncatedText({
@@ -130,19 +186,24 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
     maxWidth: undefined // Will use container width
   });
   
-  console.log('[ThinkingIndicator] Rendering:', {
-    content: content?.substring(0, 50),
-    contentLength: content?.length,
-    currentLine: currentLine?.substring(0, 50),
-    isActive,
-    duration,
-    tokenCount,
-    defaultExpanded,
-    isExpanded
-  });
+  // Remove excessive logging to prevent console spam
+  // Only log significant state changes
+  useEffect(() => {
+    if (isActive && content) {
+      console.log('[ThinkingIndicator] Started thinking with content');
+    } else if (!isActive && duration) {
+      console.log(`[ThinkingIndicator] Completed thinking after ${duration.toFixed(1)}s`);
+    }
+  }, [isActive, content, duration]);
+  
+  // Don't allow toggle in processing state (when active without content)
+  const isProcessingState = isActive && !content;
+  const isCollapsible = !isProcessingState;
   
   const handleToggle = () => {
-    setIsExpanded(!isExpanded);
+    if (isCollapsible) {
+      setIsExpanded(!isExpanded);
+    }
   };
   
   const durationText = duration ? `${duration.toFixed(1)}s` : '';
@@ -150,32 +211,25 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
   
   const summaryParts = [durationText, tokenText].filter(Boolean).join(', ');
   
-  console.log('[ThinkingIndicator] Summary calculation:', {
-    duration,
-    durationText,
-    tokenCount,
-    tokenText,
-    summaryParts,
-    isActive
-  });
+  // Removed excessive logging
   
   const headerText = isActive 
     ? content 
       ? <><ThinkingText>Thinking</ThinkingText><AnimatedDots /></>
-      : <><ThinkingText>Claude is working</ThinkingText><AnimatedDots /></>
+      : <><ThinkingText>{processingMessages[processingMessageIndex]}</ThinkingText><AnimatedDots /></>
     : summaryParts
       ? <ThinkingText>Thought for {summaryParts}</ThinkingText>
       : content
         ? <ThinkingText>Thinking complete</ThinkingText>
-        : <><ThinkingText>Claude is working</ThinkingText><AnimatedDots /></>;
+        : <><ThinkingText>{processingMessages[processingMessageIndex]}</ThinkingText><AnimatedDots /></>;
   
   // Use different icon based on state
   const IconComponent = content ? LightBulbIcon : CogIcon;
   
   return (
     <ThinkingContainer>
-      <ThinkingHeader onClick={handleToggle} isExpanded={isExpanded}>
-        <ChevronRightIcon />
+      <ThinkingHeader onClick={handleToggle} isExpanded={isExpanded} isCollapsible={isCollapsible}>
+        {isCollapsible && <ChevronRightIcon />}
         <IconComponent />
         <HeaderTextContainer>
           {headerText}
@@ -198,4 +252,6 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
       ) : null}
     </ThinkingContainer>
   );
-};
+});
+
+ThinkingIndicator.displayName = 'ThinkingIndicator';

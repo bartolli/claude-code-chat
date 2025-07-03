@@ -224,6 +224,14 @@ export interface ToWebviewProtocol {
         thinkingTokens?: number;
         cacheTokens?: number;
     }];
+    
+    // Plan mode messages
+    'message/planProposal': [void, {
+        toolId: string;
+        plan: string;
+        messageId?: string;
+    }];
+    'planMode/toggle': [void, boolean];
 }
 
 // ============= Webview to Extension Messages =============
@@ -279,6 +287,14 @@ export interface FromWebviewProtocol {
     
     // MCP requests
     'mcp/getServers': [void, void];
+    
+    // Plan mode operations
+    'plan/approve': [{
+        toolId: string;
+    }, void];
+    'plan/refine': [{
+        toolId: string;
+    }, void];
 }
 
 // Helper types for type safety

@@ -4,12 +4,13 @@ import { useSelector, useDispatch } from 'react-redux';
 import { IIdeMessenger } from '../../protocol/IdeMessenger';
 import { varWithFallback } from '../styles/theme';
 import { StepContainer } from './StepContainer';
-import { ContinueInputBox } from './ContinueInputBox';
+import { ContinueInputBox, ContinueInputBoxHandle } from './ContinueInputBox';
 import { ChatHeader } from './ChatHeader';
 import { ModelOption } from './ModelSelector';
 import { EmptyChatBody } from './EmptyChatBody';
 import { PermissionPrompt } from './PermissionPrompt';
 import { ThinkingIndicator } from './ThinkingIndicator';
+import { PlanApproval } from './PlanApproval';
 import { selectCurrentSession } from '../../state/slices/sessionSlice';
 import { selectIsProcessing } from '../../state/slices/claudeSlice';
 import { selectAvailableModels, selectSelectedModelId, setSelectedModel } from '../../state/slices/configSlice';
@@ -65,9 +66,12 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
     const selectedModelId = useSelector(selectSelectedModelId);
     const permissionRequest = useSelector((state: RootState) => state.ui.permissionRequest);
     const stepsDivRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<ContinueInputBoxHandle>(null);
+    const [planMode, setPlanMode] = useState(false);
+    const [planProposal, setPlanProposal] = useState<{ toolId?: string; plan: string | any; messageId?: string; isMarkdown?: boolean } | null>(null);
     
-    // Debug logging
-    console.log('Chat component rendering', { currentSession, isProcessing, availableModels, selectedModelId });
+    // Debug logging - commented out to prevent console spam
+    // console.log('Chat component rendering', { currentSession, isProcessing, availableModels, selectedModelId });
     
     // Map models from config to ModelOption format
     const models: ModelOption[] = availableModels.map(model => ({
@@ -80,19 +84,8 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
     // Get messages from session (no demo messages)
     const messages = currentSession?.messages || [];
     
-    // Check if we should show waiting indicator
-    // Show it when processing and either:
-    // 1. Last message is from user (no assistant response yet)
-    // 2. Last message is empty assistant with no content, no tool uses, and no thinking
-    const lastMessage = messages[messages.length - 1];
-    const showWaitingIndicator = isProcessing && 
-        messages.length > 0 && 
-        (lastMessage?.role === 'user' || 
-         (lastMessage?.role === 'assistant' && 
-          !lastMessage.content && 
-          !lastMessage.toolUses?.length && 
-          !lastMessage.thinking && 
-          !lastMessage.isThinkingActive));
+    // No longer need separate waiting indicator - handled by ThinkingIndicator in StepContainer
+    const showWaitingIndicator = false;
     
     // Auto scroll to bottom when new messages arrive or waiting indicator appears
     useEffect(() => {
@@ -101,19 +94,43 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
             stepsDivRef.current.scrollTop = 0;
         }
     }, [messages, showWaitingIndicator]);
+    
+    // Listen for planMode toggle from extension
+    useEffect(() => {
+        const unsubscribe = messenger.on('planMode/toggle', (newPlanMode: boolean) => {
+            console.log('Plan mode toggled from extension:', newPlanMode);
+            setPlanMode(newPlanMode);
+        });
+        
+        return () => {
+            unsubscribe();
+        };
+    }, [messenger]);
+    
+    // Listen for plan proposals
+    useEffect(() => {
+        const unsubscribe = messenger.on('message/planProposal', (data: { toolId?: string; plan: string | any; messageId?: string; isMarkdown?: boolean }) => {
+            console.log('Plan proposal received:', data);
+            setPlanProposal(data);
+        });
+        
+        return () => {
+            unsubscribe();
+        };
+    }, [messenger]);
 
     const handleSubmit = useCallback((message: string) => {
-        console.log('Message submitted:', message);
+        console.log('Message submitted:', message, { planMode });
         
         // Send all messages (including slash commands) to Claude
         messenger.post('chat/sendMessage', {
             text: message,
-            planMode: false,
+            planMode: planMode,
             thinkingMode: false
         });
         
         // Don't dispatch here - the backend will send the user message back
-    }, [messenger]);
+    }, [messenger, planMode]);
     
     const handleNewChat = useCallback(() => {
         console.log('New chat');
@@ -151,6 +168,26 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
         }
     }, [messenger, dispatch, permissionRequest]);
     
+    const handlePlanApprove = useCallback(() => {
+        if (planProposal) {
+            console.log('Plan approved:', planProposal.toolId);
+            messenger.post('plan/approve', { toolId: planProposal.toolId });
+            setPlanProposal(null); // Clear the proposal
+        }
+    }, [messenger, planProposal]);
+    
+    const handlePlanRefine = useCallback(() => {
+        if (planProposal) {
+            console.log('Plan refinement requested:', planProposal.toolId);
+            messenger.post('plan/refine', { toolId: planProposal.toolId });
+            setPlanProposal(null); // Clear the proposal
+            // Focus the input after refining
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 100);
+        }
+    }, [messenger, planProposal]);
+    
     return (
         <ChatContainer>
             <ChatHeader
@@ -166,21 +203,38 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                         <EmptyChatBody showOnboardingCard={false} />
                     ) : (
                         <>
-                            {messages.map((msg, index) => {
-                                // Determine if this is the last user message and we're streaming
-                                const isLastUserMessage = msg.role === 'user' && 
-                                    messages.slice(index + 1).every(m => m.role !== 'user');
-                                const shouldShowGradient = showWaitingIndicator && isLastUserMessage;
+                            {messages
+                                .map((msg, originalIndex) => {
+                                    // Skip empty assistant messages without thinking or tools
+                                    if (msg.role === 'assistant' && !msg.content.trim() && !msg.toolUses?.length && !msg.thinking && !msg.isThinkingActive) {
+                                        return null;
+                                    }
+                                    
+                                    // Determine if this is the last user message and we're streaming
+                                    const isLastUserMessage = msg.role === 'user' && 
+                                        messages.slice(originalIndex + 1).every(m => m.role !== 'user');
+                                    
+                                    // Show gradient on last user message when:
+                                    // 1. We're processing (starts immediately on submit)
+                                    // 2. There's no assistant message yet OR
+                                    // 3. The assistant message exists but has no real content/thinking yet
+                                    const nextMessage = messages[originalIndex + 1];
+                                    const shouldShowGradient = isProcessing && isLastUserMessage && (
+                                        !nextMessage || // No assistant message yet
+                                        (nextMessage.role === 'assistant' && 
+                                         !nextMessage.content && 
+                                         !nextMessage.thinking) // Assistant message exists but no actual content/thinking
+                                    );
                                 
                                 return (
-                                    <MessageContainer key={index}>
+                                    <MessageContainer key={originalIndex}>
                                         <StepContainer
                                             content={msg.content}
                                             role={msg.role}
-                                            index={index}
-                                            isLast={index === messages.length - 1}
+                                            index={originalIndex}
+                                            isLast={originalIndex === messages.length - 1}
                                             isStreaming={shouldShowGradient}
-                                            onDelete={() => console.log('Delete message', index)}
+                                            onDelete={() => console.log('Delete message', originalIndex)}
                                             onContinue={() => console.log('Continue generation')}
                                             thinking={msg.thinking}
                                             thinkingDuration={msg.thinkingDuration}
@@ -191,17 +245,9 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                                         />
                                     </MessageContainer>
                                 );
-                            })}
+                            }).filter(Boolean)}
                             
-                            {/* Show thinking indicator when Claude is processing */}
-                            {showWaitingIndicator && (
-                                <MessageContainer>
-                                    <ThinkingIndicator 
-                                        isActive={true}
-                                        defaultExpanded={true}
-                                    />
-                                </MessageContainer>
-                            )}
+                            {/* Removed standalone waiting indicator - now handled within messages */}
                             
                             {/* Show permission prompt if there's a request */}
                             {permissionRequest && (
@@ -214,20 +260,41 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                                     />
                                 </MessageContainer>
                             )}
+                            
+                            {/* Show plan proposal if there's one */}
+                            {planProposal && (
+                                <MessageContainer>
+                                    <PlanApproval
+                                        toolId={planProposal.toolId}
+                                        plan={planProposal.plan}
+                                        isMarkdown={planProposal.isMarkdown}
+                                        onApprove={handlePlanApprove}
+                                        onRefine={handlePlanRefine}
+                                    />
+                                </MessageContainer>
+                            )}
                         </>
                     )}
                 </div>
             </StepsDiv>
             <InputArea>
                 <ContinueInputBox
+                    ref={inputRef}
                     onSubmit={handleSubmit}
+                    onStop={() => {
+                        console.log('Stop button clicked');
+                        messenger.post('chat/stop', {});
+                    }}
                     placeholder="Ask Claude anything..."
                     disabled={isProcessing}
+                    isProcessing={isProcessing}
                     messenger={messenger}
                     isStreaming={showWaitingIndicator}
                     models={models}
                     selectedModelId={selectedModelId}
                     onModelChange={handleModelChange}
+                    planMode={planMode}
+                    onPlanModeChange={setPlanMode}
                 />
             </InputArea>
         </ChatContainer>

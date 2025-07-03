@@ -16,9 +16,9 @@ import {
 import { InputToolbar } from './InputToolbar';
 import '../../styles/components/TipTapEditor.css';
 
-const EditorContainer = styled.div<{ isFocused: boolean; hasLump?: boolean }>`
+const EditorContainer = styled.div<{ isFocused: boolean; hasLump?: boolean; planMode?: boolean }>`
     background-color: ${vscInputBackground};
-    border: 1px solid ${props => props.isFocused ? vscCommandCenterActiveBorder : vscCommandCenterInactiveBorder};
+    border: 1px solid ${props => props.planMode ? 'var(--vscode-editorInfo-border)' : props.isFocused ? vscCommandCenterActiveBorder : vscCommandCenterInactiveBorder};
     border-radius: ${props => props.hasLump ? `5px 5px ${defaultBorderRadius} ${defaultBorderRadius}` : defaultBorderRadius};
     display: flex;
     flex-direction: column;
@@ -83,8 +83,10 @@ interface TipTapEditorProps {
     placeholder?: string;
     onSubmit?: (content: string) => void;
     onUpdate?: (editor: Editor) => void;
+    onStop?: () => void;
     autoFocus?: boolean;
     editable?: boolean;
+    isProcessing?: boolean;
     onAddContext?: () => void;
     tokenCount?: number;
     onFocus?: () => void;
@@ -93,14 +95,18 @@ interface TipTapEditorProps {
     selectedModelId?: string;
     onModelChange?: (modelId: string) => void;
     hasLump?: boolean;
+    planMode?: boolean;
+    onPlanModeChange?: (active: boolean) => void;
 }
 
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({ 
     placeholder = "Ask Claude anything...",
     onSubmit,
     onUpdate,
+    onStop,
     autoFocus = true,
     editable = true,
+    isProcessing = false,
     onAddContext,
     tokenCount = 0,
     onFocus,
@@ -108,7 +114,9 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     models,
     selectedModelId,
     onModelChange,
-    hasLump = false
+    hasLump = false,
+    planMode = false,
+    onPlanModeChange
 }) => {
     const [isFocused, setIsFocused] = React.useState(false);
 
@@ -265,7 +273,7 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
     }
 
     return (
-        <EditorContainer isFocused={isFocused} hasLump={hasLump}>
+        <EditorContainer isFocused={isFocused} hasLump={hasLump} planMode={planMode}>
             <EditorContentWrapper>
                 <EditorContent editor={editor} />
             </EditorContentWrapper>
@@ -279,11 +287,15 @@ export const TipTapEditor: React.FC<TipTapEditorProps> = ({
                     }
                 }}
                 onAddContext={onAddContext}
+                onStop={onStop}
                 canSubmit={editor ? editor.getText().trim().length > 0 && editable : false}
+                isProcessing={isProcessing}
                 tokenCount={tokenCount}
                 models={models}
                 selectedModelId={selectedModelId}
                 onModelChange={onModelChange}
+                planMode={planMode}
+                onPlanModeChange={onPlanModeChange}
             />
         </EditorContainer>
     );

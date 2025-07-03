@@ -5,8 +5,8 @@ import { getFontSize } from '../../util';
 import { StyledMarkdownPreview } from '../StyledMarkdownPreview';
 import { ResponseActions } from './ResponseActions';
 import { ThinkingIndicator } from '../ThinkingIndicator';
-import { ToolUseDisplay } from '../ToolUseDisplay';
-import { ToolTreeView } from '../ToolTreeView';
+import { ThinkingStateMachine } from '../ThinkingIndicator/ThinkingStateMachine';
+import { InlineToolDisplay } from '../InlineToolDisplay';
 import { GradientBorder } from './GradientBorder';
 
 interface StepContainerProps {
@@ -79,6 +79,13 @@ export const StepContainer: React.FC<StepContainerProps> = ({
         thinkingDuration,
         thinkingTokens: tokenUsage?.thinking
     });
+    
+    // Don't render empty assistant messages
+    if (role === 'assistant' && !content?.trim() && !toolUses?.length && !thinking && !isThinkingActive) {
+        console.log(`[StepContainer] Skipping empty assistant message ${index}`);
+        return null;
+    }
+    
     const [isTruncated, setIsTruncated] = useState(false);
 
     // Check if message appears truncated
@@ -122,23 +129,29 @@ export const StepContainer: React.FC<StepContainerProps> = ({
                                 duration={thinkingDuration}
                                 isActive={isThinkingActive}
                                 tokenCount={tokenUsage?.thinking}
+                                responsePreview={!isThinkingActive && content ? content.split('\n')[0].trim() : undefined}
                             />
                         )}
                         
-                        {/* Show tool uses if available */}
+                        {/* Show tool uses after thinking but before content */}
                         {toolUses && toolUses.length > 0 && (
-                            <ToolTreeView toolUses={toolUses} />
+                            <>
+                                {/* Filter out exit_plan_mode as it's handled separately in Chat component */}
+                                {(() => {
+                                    const otherTools = toolUses.filter(t => t.toolName !== 'exit_plan_mode');
+                                    return otherTools.length > 0 ? <InlineToolDisplay toolUses={otherTools} /> : null;
+                                })()}
+                            </>
                         )}
                         
-                        {/* Show content */}
+                        {/* Show content last */}
                         <StyledMarkdownPreview
                             source={content}
                             isRenderingInStepContainer
                             itemIndex={index}
                         />
                         
-                        {/* Show thinking indicator for streaming */}
-                        {isLast && isStreaming && !thinking && <ThinkingIndicator />}
+                        {/* Removed duplicate thinking indicator - handled above */}
                     </>
                 )}
             </ContentDiv>

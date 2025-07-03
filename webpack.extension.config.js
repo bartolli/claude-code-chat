@@ -1,4 +1,5 @@
 const path = require('path');
+const CopyPlugin = require('copy-webpack-plugin');
 
 module.exports = {
     target: 'node', // VS Code extensions run in a Node.js context
@@ -55,5 +56,19 @@ module.exports = {
         minimize: false // Keep code readable for debugging
     },
     
-    devtool: 'source-map'
+    devtool: 'source-map',
+    
+    plugins: [
+        new CopyPlugin({
+            patterns: [
+                { 
+                    from: 'src/hooks', 
+                    to: 'hooks',
+                    globOptions: {
+                        ignore: ['**/*.ts'] // Only copy JS files
+                    }
+                }
+            ]
+        })
+    ]
 };

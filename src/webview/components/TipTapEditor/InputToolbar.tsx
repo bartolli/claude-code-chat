@@ -1,9 +1,10 @@
 import React from 'react';
 import styled from 'styled-components';
-import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { PaperAirplaneIcon, PlusIcon, StopIcon } from '@heroicons/react/24/outline';
 import { Button } from '../Button';
 import { lightGray, defaultBorderRadius } from '../styled';
 import { ModelSelector } from './ModelSelector';
+import { PlanModeToggle } from './PlanModeToggle';
 
 const ToolbarContainer = styled.div`
     display: flex;
@@ -61,21 +62,29 @@ const IconButton = styled.button`
 interface InputToolbarProps {
     onSubmit?: () => void;
     onAddContext?: () => void;
+    onStop?: () => void;
     canSubmit?: boolean;
+    isProcessing?: boolean;
     tokenCount?: number;
     models?: Array<{ id: string; name: string }>;
     selectedModelId?: string;
     onModelChange?: (modelId: string) => void;
+    planMode?: boolean;
+    onPlanModeChange?: (active: boolean) => void;
 }
 
 export const InputToolbar: React.FC<InputToolbarProps> = ({
     onSubmit,
     onAddContext,
+    onStop,
     canSubmit = true,
+    isProcessing = false,
     tokenCount = 0,
     models = [],
     selectedModelId = '',
-    onModelChange
+    onModelChange,
+    planMode = false,
+    onPlanModeChange
 }) => {
     return (
         <ToolbarContainer>
@@ -85,6 +94,12 @@ export const InputToolbar: React.FC<InputToolbarProps> = ({
                         models={models}
                         selectedModelId={selectedModelId}
                         onModelChange={onModelChange}
+                    />
+                )}
+                {onPlanModeChange && (
+                    <PlanModeToggle
+                        isActive={planMode}
+                        onChange={onPlanModeChange}
                     />
                 )}
                 <IconButton 
@@ -100,14 +115,25 @@ export const InputToolbar: React.FC<InputToolbarProps> = ({
             </LeftSection>
             
             <RightSection>
-                <IconButton
-                    onClick={onSubmit}
-                    disabled={!canSubmit}
-                    title="Send message (Enter)"
-                    aria-label="Send message"
-                >
-                    <PaperAirplaneIcon />
-                </IconButton>
+                {isProcessing && onStop ? (
+                    <IconButton
+                        onClick={onStop}
+                        title="Stop processing (ESC)"
+                        aria-label="Stop processing"
+                        style={{ color: 'var(--vscode-errorForeground)' }}
+                    >
+                        <StopIcon />
+                    </IconButton>
+                ) : (
+                    <IconButton
+                        onClick={onSubmit}
+                        disabled={!canSubmit}
+                        title="Send message (Enter)"
+                        aria-label="Send message"
+                    >
+                        <PaperAirplaneIcon />
+                    </IconButton>
+                )}
             </RightSection>
         </ToolbarContainer>
     );

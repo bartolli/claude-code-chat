@@ -12,6 +12,7 @@ import { ClaudeStreamMessage } from '../types/claude';
 import { Readable } from 'stream';
 import { mcpService } from './McpService';
 import { mcpClientService } from './McpClientService';
+import { MessageSegmenter } from './MessageSegmenter';
 
 /**
  * Simplified ExtensionMessageHandler for compilation
@@ -22,12 +23,19 @@ export class ExtensionMessageHandler {
     private webviewProtocol: SimpleWebviewProtocol | null = null;
     private streamProcessor: StreamProcessor;
     private jsonParser: ChunkedJSONParser;
+    private messageSegmenter: MessageSegmenter;
     private currentSessionId: string | null = null;
     private currentClaudeProcess: cp.ChildProcess | null = null;
     private pendingPermissionResponses: Map<string, (response: string) => void> = new Map();
     private thinkingStartTime: number | null = null;
     private accumulatedThinking: string = '';
     private latestThinkingLine: string = '';
+    private waitingForPlan: boolean = false;
+    private hasReceivedPlan: boolean = false;
+    private isInPlanMode: boolean = false;
+    private hasCreatedAssistantMessage: boolean = false;
+    private thinkingMessageId: string | null = null;
+    private currentAssistantMessageId: string | null = null;
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -36,6 +44,7 @@ export class ExtensionMessageHandler {
         this.logger = serviceContainer.get('Logger') as Logger;
         this.streamProcessor = serviceContainer.get('StreamProcessor') as StreamProcessor;
         this.jsonParser = serviceContainer.get('ChunkedJSONParser') as ChunkedJSONParser;
+        this.messageSegmenter = new MessageSegmenter();
         
         // Get or create output channel
         try {
@@ -43,6 +52,12 @@ export class ExtensionMessageHandler {
         } catch {
             this.outputChannel = vscode.window.createOutputChannel('Claude Code GUI');
         }
+        
+        // Configure hooks for plan mode
+        this.configurePlanModeHooks();
+        
+        // Watch for plan files
+        this.watchForPlanFiles();
     }
 
     public attach(webviewProtocol: SimpleWebviewProtocol): void {
@@ -111,6 +126,50 @@ export class ExtensionMessageHandler {
                 this.handlePermissionResponse(permissionData);
                 return undefined as any;
             
+            case 'plan/approve':
+                this.logger.info('ExtensionMessageHandler', 'Plan approved', data);
+                this.outputChannel.appendLine(`[Plan] User approved plan`);
+                
+                const { sessionId } = data as any;
+                // Create approval file for hook
+                const approvalPath = `/tmp/claude-plan-approval-${sessionId || this.currentSessionId}`;
+                await fs.promises.writeFile(approvalPath, '');
+                
+                // Tell Claude to continue (retry exit_plan_mode)
+                await this.handleChatMessage({ 
+                    text: "Please continue with the plan.",
+                    planMode: true
+                });
+                
+                // Update UI
+                this.webviewProtocol?.post('planMode/toggle', false);
+                return undefined as any;
+                
+            case 'plan/refine':
+                this.logger.info('ExtensionMessageHandler', 'Plan refinement requested', data);
+                this.outputChannel.appendLine(`[Plan] User requested plan refinement`);
+                
+                // User will provide refinement instructions
+                // Just focus the input
+                return undefined as any;
+            
+            case 'chat/stopRequest':
+                // Handle stop request - send ESC to Claude process
+                this.logger.info('ExtensionMessageHandler', 'Stop requested');
+                this.outputChannel.appendLine(`[Stop] User requested to stop Claude`);
+                
+                if (this.currentClaudeProcess && this.currentClaudeProcess.stdin) {
+                    // Send ESC character to abort while preserving session context
+                    this.currentClaudeProcess.stdin.write('\x1b');
+                    this.outputChannel.appendLine(`[Stop] Sent ESC to Claude process`);
+                    
+                    // Update UI to show stopped state
+                    this.webviewProtocol?.post('status/processing', false);
+                } else {
+                    this.outputChannel.appendLine(`[Stop] No active Claude process to stop`);
+                }
+                return undefined as any;
+            
             default:
                 this.logger.warn('ExtensionMessageHandler', `Unhandled message type: ${type}`);
                 return undefined as any;
@@ -152,6 +211,15 @@ export class ExtensionMessageHandler {
                 // Set processing status to true
                 this.webviewProtocol.post('status/processing', true);
                 this.outputChannel.appendLine(`[DEBUG] Set processing status to true`);
+                
+                // Don't create assistant message yet - wait for actual content
+                // This prevents the double processing indicator
+                this.hasCreatedAssistantMessage = false;
+                this.currentAssistantMessageId = null;
+                this.outputChannel.appendLine(`[DEBUG] Waiting for content before creating assistant message`);
+                
+                // Reset message creation flag for new message
+                this.thinkingMessageId = null;
             } else {
                 this.outputChannel.appendLine(`[ERROR] WebviewProtocol not initialized!`);
                 throw new Error('WebviewProtocol not initialized');
@@ -178,6 +246,20 @@ export class ExtensionMessageHandler {
             
             // Skip permission prompts to avoid blocking the process
             args.push('--dangerously-skip-permissions');
+            
+            // Add plan mode if requested
+            if (data.planMode) {
+                args.push('--permission-mode', 'plan');
+                
+                // Append system prompt to ensure Claude uses exit_plan_mode
+                args.push('--append-system-prompt', 
+                    'When you have finished analyzing the request and are ready to present your implementation plan, ' +
+                    'you MUST call the exit_plan_mode tool with your complete plan. ' +
+                    'The exit_plan_mode tool is required to present plans for user approval in plan mode.'
+                );
+                
+                this.outputChannel.appendLine('[DEBUG] Plan mode enabled with exit_plan_mode instructions');
+            }
             
             // Note: When using stdin, -p should not have the prompt as argument
             
@@ -492,6 +574,10 @@ export class ExtensionMessageHandler {
             let totalCost: number = 0;
             let apiKeySource: string | undefined;
             
+            // Reset message segmenter for new stream
+            const streamId = `stream_${Date.now()}`;
+            this.messageSegmenter.reset(streamId);
+            
             // Set encoding for stdout
             claudeProcess.stdout?.setEncoding('utf8');
             
@@ -522,32 +608,34 @@ export class ExtensionMessageHandler {
                                 // Process the JSON message
                                 const streamingState = { isStreaming };
                                 this.processClaudeStreamMessage(json, (content) => {
-                                    assistantContent += content;
-                                    this.outputChannel.appendLine(`[DEBUG] webviewProtocol status: ${this.webviewProtocol ? 'available' : 'NULL'}`);
+                                    // Process content through segmenter
+                                    const segment = this.messageSegmenter.processTextChunk(content);
                                     
-                                    if (!streamingState.isStreaming) {
-                                        streamingState.isStreaming = true;
-                                        isStreaming = true;
-                                        if (this.webviewProtocol) {
-                                            this.outputChannel.appendLine(`[DEBUG] Sending message/add for assistant`);
-                                            this.webviewProtocol.post('message/add', {
-                                                role: 'assistant',
-                                                content: assistantContent
-                                            });
-                                        } else {
-                                            this.outputChannel.appendLine(`[ERROR] Cannot send message/add - webviewProtocol is NULL`);
+                                    // Always accumulate content and update the single assistant message
+                                    if (this.webviewProtocol && this.hasCreatedAssistantMessage) {
+                                        // Get all accumulated content from all segments plus current
+                                        const allSegments = this.messageSegmenter.getSegments();
+                                        const currentSegment = this.messageSegmenter.state?.currentSegment;
+                                        
+                                        let totalContent = '';
+                                        // Add content from completed segments
+                                        for (const seg of allSegments) {
+                                            totalContent += seg.content;
                                         }
-                                    } else {
-                                        if (this.webviewProtocol) {
-                                            this.outputChannel.appendLine(`[DEBUG] Sending message/update`);
-                                            this.webviewProtocol.post('message/update', {
-                                                role: 'assistant',
-                                                content: assistantContent
-                                            });
-                                        } else {
-                                            this.outputChannel.appendLine(`[ERROR] Cannot send message/update - webviewProtocol is NULL`);
+                                        // Add content from current segment if any
+                                        if (currentSegment && currentSegment.content) {
+                                            totalContent += currentSegment.content;
                                         }
+                                        
+                                        // Update the message with accumulated content
+                                        this.webviewProtocol.post('message/update', {
+                                            role: 'assistant',
+                                            content: totalContent
+                                        });
                                     }
+                                    
+                                    // Keep track of all content for backwards compatibility
+                                    assistantContent += content;
                                 }, (metadata) => {
                                     if (metadata.sessionId) sessionId = metadata.sessionId;
                                     if (metadata.messageId) messageId = metadata.messageId;
@@ -571,6 +659,21 @@ export class ExtensionMessageHandler {
                             this.processClaudeStreamMessage(json, () => {}, () => {}, { isStreaming: true });
                         } catch (error) {
                             this.outputChannel.appendLine(`[DEBUG] Failed to parse remaining buffer: ${jsonBuffer}`);
+                        }
+                    }
+                    
+                    // Finalize any remaining segments
+                    const finalSegments = this.messageSegmenter.finalize();
+                    this.outputChannel.appendLine(`[DEBUG] Stream finalized with ${finalSegments.length} total segments`);
+                    
+                    // Send final content update if we have accumulated content
+                    if (finalSegments.length > 0 && this.webviewProtocol) {
+                        const finalContent = finalSegments.map(seg => seg.content).join('');
+                        if (finalContent) {
+                            this.webviewProtocol.post('message/update', {
+                                role: 'assistant',
+                                content: finalContent
+                            });
                         }
                     }
                 });
@@ -620,8 +723,35 @@ export class ExtensionMessageHandler {
                 }
                 // Always send completion message and set processing to false
                 this.webviewProtocol?.post('chat/messageComplete', {});
+                
+                // Get final content from all segments
+                const finalContent = this.messageSegmenter.state?.segments
+                    .map(seg => seg.content)
+                    .join('') || assistantContent || '';
+                
+                // Ensure we have an assistant message
+                if (!this.hasCreatedAssistantMessage && finalContent) {
+                    this.webviewProtocol?.post('message/add', {
+                        role: 'assistant',
+                        content: finalContent,
+                        isThinkingActive: false
+                    });
+                } else if (this.hasCreatedAssistantMessage) {
+                    // Update with final content and clear thinking state
+                    this.webviewProtocol?.post('message/update', {
+                        role: 'assistant',
+                        content: finalContent,
+                        isThinkingActive: false
+                    });
+                }
+                
                 this.webviewProtocol?.post('status/processing', false);
                 this.outputChannel.appendLine(`[DEBUG] Set processing status to false`);
+                
+                // Reset message creation flags for next message
+                this.hasCreatedAssistantMessage = false;
+                this.currentAssistantMessageId = null;
+                this.thinkingMessageId = null;
             });
             
         } catch (error: any) {
@@ -705,6 +835,25 @@ export class ExtensionMessageHandler {
                         sessionId: json.session_id,
                         apiKeySource: json.apiKeySource
                     });
+                    
+                    // Create initial assistant message but track it properly
+                    if (!streamingState.isStreaming) {
+                        streamingState.isStreaming = true;
+                        this.messageSegmenter.reset(`stream_${Date.now()}`);
+                        
+                        // Create the assistant message once here with messageId if available
+                        if (!this.hasCreatedAssistantMessage && this.webviewProtocol) {
+                            this.webviewProtocol.post('message/add', {
+                                role: 'assistant',
+                                content: '',
+                                messageId: json.message?.id,
+                                isThinkingActive: true
+                            });
+                            this.hasCreatedAssistantMessage = true;
+                            this.currentAssistantMessageId = json.message?.id || null;
+                            this.outputChannel.appendLine(`[DEBUG] Created initial assistant message in system case with messageId: ${json.message?.id}`);
+                        }
+                    }
                 }
                 break;
                 
@@ -712,14 +861,10 @@ export class ExtensionMessageHandler {
                 this.outputChannel.appendLine(`[JSON] Assistant message received`);
                 this.outputChannel.appendLine(`[DEBUG] Message structure: ${JSON.stringify(json.message, null, 2).substring(0, 500)}...`);
                 
-                // Ensure we have an assistant message to attach tools/thinking to
+                // Check if we need to set up streaming state
                 if (!streamingState.isStreaming && json.message?.content) {
                     streamingState.isStreaming = true;
-                    this.outputChannel.appendLine(`[DEBUG] Creating initial assistant message`);
-                    this.webviewProtocol?.post('message/add', {
-                        role: 'assistant',
-                        content: ''
-                    });
+                    this.outputChannel.appendLine(`[DEBUG] Streaming started`);
                     
                     // Check if this message contains thinking
                     const hasThinking = Array.isArray(json.message.content) && 
@@ -729,10 +874,7 @@ export class ExtensionMessageHandler {
                         // Reset accumulated thinking for new message
                         this.accumulatedThinking = '';
                         this.latestThinkingLine = '';
-                        // Send initial thinking indicator to show it's active
-                        this.webviewProtocol?.post('message/thinking', {
-                            isActive: true
-                        });
+                        // Don't send initial thinking here - already sent in handleChatMessage
                     }
                 }
                 
@@ -743,10 +885,92 @@ export class ExtensionMessageHandler {
                         for (const block of json.message.content) {
                             if (block.type === 'text' && block.text) {
                                 this.outputChannel.appendLine(`[JSON] Text content: ${block.text.substring(0, 50)}...`);
+                                
+                                // Update messageId if we have one but the message doesn't
+                                if (this.hasCreatedAssistantMessage && !this.currentAssistantMessageId && json.message?.id) {
+                                    this.currentAssistantMessageId = json.message.id;
+                                    this.webviewProtocol?.post('message/update', {
+                                        role: 'assistant',
+                                        messageId: json.message.id
+                                    });
+                                    this.outputChannel.appendLine(`[DEBUG] Updated assistant message with messageId: ${json.message.id}`);
+                                }
+                                
+                                // Check if this message contains a JSON plan
+                                const trimmedText = block.text.trim();
+                                
+                                // First try: Check if the entire message is just JSON
+                                if (trimmedText.startsWith('{') && trimmedText.endsWith('}')) {
+                                    try {
+                                        const planData = JSON.parse(trimmedText);
+                                        if (planData.type === 'plan') {
+                                            this.outputChannel.appendLine(`[JSON] Detected plan response (entire message)`);
+                                            
+                                            // Send plan to UI for approval
+                                            this.webviewProtocol?.post('message/planProposal', {
+                                                plan: planData,
+                                                messageId: json.message?.id
+                                            });
+                                            
+                                            // Don't show the raw JSON to user
+                                            onContent(''); // Send empty content to avoid showing JSON
+                                            return;
+                                        }
+                                    } catch (e) {
+                                        // Not valid JSON, continue to extract attempt
+                                    }
+                                }
+                                
+                                // Second try: Extract JSON from mixed content
+                                const jsonMatch = trimmedText.match(/\{"type":"plan"[^}]+\}/);
+                                if (jsonMatch) {
+                                    try {
+                                        const planData = JSON.parse(jsonMatch[0]);
+                                        if (planData.type === 'plan') {
+                                            this.outputChannel.appendLine(`[JSON] Detected plan response (extracted from text)`);
+                                            
+                                            // Send plan to UI for approval
+                                            this.webviewProtocol?.post('message/planProposal', {
+                                                plan: planData,
+                                                messageId: json.message?.id
+                                            });
+                                            
+                                            // Show only the non-JSON part to user
+                                            const textBeforeJson = trimmedText.substring(0, trimmedText.indexOf(jsonMatch[0]));
+                                            const textAfterJson = trimmedText.substring(trimmedText.indexOf(jsonMatch[0]) + jsonMatch[0].length);
+                                            onContent(textBeforeJson + textAfterJson);
+                                            return;
+                                        }
+                                    } catch (e) {
+                                        this.outputChannel.appendLine(`[JSON] Failed to parse extracted JSON: ${e}`);
+                                    }
+                                }
+                                
+                                // Check if this is a plan response (when we're waiting for one)
+                                if (this.waitingForPlan && block.text.includes('## Implementation Plan')) {
+                                    this.outputChannel.appendLine(`[Plan Mode] Detected plan in response`);
+                                    this.hasReceivedPlan = true;
+                                    this.waitingForPlan = false;
+                                    
+                                    // Send the plan content to UI with special formatting
+                                    this.webviewProtocol?.post('message/planProposal', {
+                                        plan: block.text,
+                                        messageId: json.message?.id,
+                                        isMarkdown: true
+                                    });
+                                }
+                                
                                 this.outputChannel.appendLine(`[DEBUG] Calling onContent callback with text`);
                                 onContent(block.text);
                             } else if (block.type === 'thinking' && block.thinking) {
                                 this.outputChannel.appendLine(`[JSON] Thinking content: ${block.thinking.substring(0, 50)}...`);
+                                
+                                // Store message ID on first thinking
+                                if (!this.thinkingMessageId && json.message?.id) {
+                                    this.thinkingMessageId = json.message.id;
+                                    this.outputChannel.appendLine(`[DEBUG] Stored thinking messageId: ${this.thinkingMessageId}`);
+                                }
+                                
                                 // Track thinking start time
                                 if (!this.thinkingStartTime) {
                                     this.thinkingStartTime = Date.now();
@@ -763,28 +987,63 @@ export class ExtensionMessageHandler {
                                 // Send thinking update to UI
                                 this.outputChannel.appendLine(`[DEBUG] webviewProtocol status: ${this.webviewProtocol ? 'available' : 'not available'}`);
                                 if (this.webviewProtocol) {
-                                    this.outputChannel.appendLine(`[DEBUG] Sending thinking update to UI`);
+                                    this.outputChannel.appendLine(`[DEBUG] Sending thinking update to UI with messageId: ${this.thinkingMessageId}`);
                                     this.webviewProtocol.post('message/thinking', {
                                         content: this.accumulatedThinking,
                                         currentLine: this.latestThinkingLine,
-                                        isActive: true
+                                        isActive: true,
+                                        messageId: this.thinkingMessageId
                                     });
                                 } else {
                                     this.outputChannel.appendLine(`[ERROR] Cannot send thinking update - webviewProtocol not available`);
                                 }
                             } else if (block.type === 'tool_use') {
                                 this.outputChannel.appendLine(`[JSON] Tool use: ${block.name} with id: ${block.id}`);
-                                // Send tool use update to UI
+                                
+                                // Process tool use through segmenter
+                                this.messageSegmenter.processToolUse({
+                                    toolName: block.name,
+                                    toolId: block.id,
+                                    input: block.input
+                                });
+                                
+                                // Send tool use update to UI - attach to the assistant message
                                 this.webviewProtocol?.post('message/toolUse', {
                                     toolName: block.name,
                                     toolId: block.id,
                                     input: block.input,
                                     status: 'calling'
+                                    // Don't send segmentId - let it attach to the last assistant message
                                 });
                             }
                         }
                     } else if (typeof json.message.content === 'string') {
                         this.outputChannel.appendLine(`[JSON] String content: ${json.message.content.substring(0, 50)}...`);
+                        
+                        // Check if this is a JSON plan response
+                        const trimmedContent = json.message.content.trim();
+                        // Check if the entire message is just JSON (no other text)
+                        if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
+                            try {
+                                const planData = JSON.parse(trimmedContent);
+                                if (planData.type === 'plan') {
+                                    this.outputChannel.appendLine(`[JSON] Detected plan response (string format)`);
+                                    
+                                    // Send plan to UI for approval
+                                    this.webviewProtocol?.post('message/planProposal', {
+                                        plan: planData,
+                                        messageId: json.message?.id
+                                    });
+                                    
+                                    // Don't show the raw JSON to user
+                                    return;
+                                }
+                            } catch (e) {
+                                this.outputChannel.appendLine(`[JSON] Failed to parse as plan: ${e}`);
+                                // Not valid JSON plan, continue normally
+                            }
+                        }
+                        
                         onContent(json.message.content);
                     }
                 }
@@ -814,6 +1073,7 @@ export class ExtensionMessageHandler {
                     for (const block of json.message.content) {
                         if (block.type === 'tool_result' && block.tool_use_id) {
                             this.outputChannel.appendLine(`[JSON] Tool result for: ${block.tool_use_id}`);
+                            
                             
                             // Extract text from MCP tool result content array
                             let resultText = block.text;
@@ -850,6 +1110,29 @@ export class ExtensionMessageHandler {
                     });
                 }
                 
+                // Check if we're in plan mode and haven't received a plan yet
+                if (this.isInPlanMode && !this.hasReceivedPlan && !this.waitingForPlan && !json.is_error) {
+                    this.outputChannel.appendLine(`[Plan Mode] Analysis complete, requesting plan`);
+                    this.waitingForPlan = true;
+                    
+                    // Send completion first
+                    this.webviewProtocol?.post('chat/messageComplete', {
+                        sessionId: json.session_id,
+                        totalCost: json.total_cost_usd,
+                        duration: json.duration_ms
+                    });
+                    
+                    // Then inject a message asking for the plan
+                    setTimeout(() => {
+                        this.handleChatMessage({
+                            text: "Based on your analysis, please create a detailed implementation plan. Format it as:\n\n## Implementation Plan\n\n**Title:** [Brief description]\n\n**Steps:**\n1. [First change with details]\n2. [Second change with details]\n3. [Continue with all necessary steps]\n\n**Summary:** [What will be accomplished]\n\n**Estimated complexity:** [Low/Medium/High]",
+                            planMode: false // Turn off plan mode for the response
+                        });
+                    }, 500);
+                    
+                    return; // Don't send duplicate completion message
+                }
+                
                 // Check if result message contains thinking tokens
                 if (json.usage?.thinking_tokens) {
                     this.outputChannel.appendLine(`[DEBUG] Result contains thinking tokens: ${json.usage.thinking_tokens}`);
@@ -873,13 +1156,15 @@ export class ExtensionMessageHandler {
                         content: this.accumulatedThinking,
                         currentLine: this.latestThinkingLine,
                         isActive: false,
-                        duration: thinkingDuration
+                        duration: thinkingDuration,
+                        messageId: this.thinkingMessageId
                     });
                     
                     // Reset thinking state
                     this.thinkingStartTime = null;
                     this.accumulatedThinking = '';
                     this.latestThinkingLine = '';
+                    this.thinkingMessageId = null;
                 }
                 
                 // Send completion message
@@ -1217,5 +1502,107 @@ export class ExtensionMessageHandler {
             this.webviewProtocol?.post('mcp/status', { servers: [] });
         }
     }
-
+    
+    /**
+     * Configure hooks for plan mode approval
+     */
+    private async configurePlanModeHooks(): Promise<void> {
+        try {
+            // Get the hook script path from extension output directory
+            const hookPath = path.join(this.context.extensionPath, 'out', 'hooks', 'plan-approval-hook.js');
+            
+            // Check if hook file exists
+            if (!fs.existsSync(hookPath)) {
+                this.outputChannel.appendLine(`[Hooks] Plan approval hook not found at: ${hookPath}`);
+                return;
+            }
+            
+            // Make hook executable
+            fs.chmodSync(hookPath, '755');
+            
+            // Read current Claude settings
+            const settingsPath = path.join(process.env.HOME || '', '.claude', 'settings.json');
+            let settings: any = {};
+            
+            if (fs.existsSync(settingsPath)) {
+                try {
+                    const content = fs.readFileSync(settingsPath, 'utf8');
+                    settings = JSON.parse(content);
+                } catch (e) {
+                    this.outputChannel.appendLine(`[Hooks] Error reading Claude settings: ${e}`);
+                }
+            }
+            
+            // Ensure hooks structure exists
+            if (!settings.hooks) {
+                settings.hooks = {};
+            }
+            if (!settings.hooks.PreToolUse) {
+                settings.hooks.PreToolUse = [];
+            }
+            
+            // Check if our hook is already configured
+            const hookCommand = `node ${hookPath}`;
+            const existingHook = settings.hooks.PreToolUse.find((h: any) => 
+                h.matcher === 'exit_plan_mode' && 
+                h.hooks?.some((hook: any) => hook.command === hookCommand)
+            );
+            
+            if (!existingHook) {
+                // Add our hook configuration
+                settings.hooks.PreToolUse.push({
+                    matcher: 'exit_plan_mode',
+                    hooks: [{
+                        type: 'command',
+                        command: hookCommand
+                    }]
+                });
+                
+                // Create .claude directory if it doesn't exist
+                const claudeDir = path.dirname(settingsPath);
+                if (!fs.existsSync(claudeDir)) {
+                    fs.mkdirSync(claudeDir, { recursive: true });
+                }
+                
+                // Write updated settings
+                fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+                this.outputChannel.appendLine(`[Hooks] Plan approval hook configured successfully`);
+            } else {
+                this.outputChannel.appendLine(`[Hooks] Plan approval hook already configured`);
+            }
+            
+        } catch (error) {
+            this.outputChannel.appendLine(`[Hooks] Error configuring hooks: ${error}`);
+        }
+    }
+    
+    /**
+     * Watch for plan files created by the hook
+     */
+    private watchForPlanFiles(): void {
+        const watcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern('/tmp', 'claude-plan-content-*')
+        );
+        
+        watcher.onDidCreate(async (uri) => {
+            try {
+                const content = await vscode.workspace.fs.readFile(uri);
+                const planData = JSON.parse(Buffer.from(content).toString());
+                
+                // Show plan in UI
+                this.webviewProtocol?.post('message/planProposal', {
+                    plan: planData.plan,
+                    sessionId: planData.session_id,
+                    isMarkdown: true
+                });
+                
+                this.outputChannel.appendLine(`[Plan] Detected plan file: ${uri.fsPath}`);
+            } catch (e) {
+                this.outputChannel.appendLine(`[Plan] Error reading plan file: ${e}`);
+            }
+        });
+        
+        // Cleanup watcher on dispose
+        this.context.subscriptions.push(watcher);
+    }
 }

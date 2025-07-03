@@ -135,7 +135,15 @@ const sessionSlice = createSlice({
     },
     
     // Streaming message handling
-    messageAdded: (state, action: PayloadAction<{ role: 'user' | 'assistant'; content: string }>) => {
+    messageAdded: (state, action: PayloadAction<{ 
+      role: 'user' | 'assistant'; 
+      content: string;
+      messageId?: string;
+      segmentId?: string;
+      segmentType?: 'intro' | 'tool-preface' | 'tool-response' | 'continuation';
+      parentMessageId?: string;
+      isThinkingActive?: boolean;
+    }>) => {
       console.log('[sessionSlice] messageAdded called with:', action.payload);
       
       // We'll check for empty duplicates after ensuring we have a session
@@ -179,17 +187,24 @@ const sessionSlice = createSlice({
         // Check for empty assistant message duplicates
         if (!action.payload.content && action.payload.role === 'assistant') {
           const lastMessage = session.messages[session.messages.length - 1];
-          if (lastMessage?.role === 'assistant' && !lastMessage.content) {
+          // Don't skip if this message has thinking indicators or a messageId
+          if (lastMessage?.role === 'assistant' && !lastMessage.content && 
+              !action.payload.isThinkingActive && !action.payload.messageId) {
             console.log('[sessionSlice] Skipping duplicate empty assistant message');
             return;
           }
-          console.log('[sessionSlice] Adding empty assistant message as placeholder for tools');
+          console.log('[sessionSlice] Adding empty assistant message as placeholder for tools or thinking');
         }
         
         const message: ClaudeMessage = {
           role: action.payload.role,
           content: action.payload.content,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          messageId: action.payload.messageId,
+          segmentId: action.payload.segmentId,
+          segmentType: action.payload.segmentType,
+          parentMessageId: action.payload.parentMessageId,
+          isThinkingActive: action.payload.isThinkingActive
         };
         
         console.log('[sessionSlice] Adding message to session:', message);
@@ -203,7 +218,13 @@ const sessionSlice = createSlice({
       }
     },
     
-    messageUpdated: (state, action: PayloadAction<{ role: 'assistant'; content: string }>) => {
+    messageUpdated: (state, action: PayloadAction<{ 
+      role: 'assistant'; 
+      content?: string;
+      segmentId?: string;
+      isThinkingActive?: boolean;
+      messageId?: string;
+    }>) => {
       // Ensure we have a current session
       if (!state.currentSessionId) {
         // Create a new session if none exists
@@ -226,26 +247,62 @@ const sessionSlice = createSlice({
       
       const session = state.sessions[state.currentSessionId];
       if (session) {
-        // Find the last assistant message
-        let lastAssistantIndex = -1;
-        for (let i = session.messages.length - 1; i >= 0; i--) {
-          if (session.messages[i].role === 'assistant') {
-            lastAssistantIndex = i;
-            break;
+        // If segmentId provided, find that specific segment
+        if (action.payload.segmentId) {
+          const segmentIndex = session.messages.findIndex(
+            msg => msg.segmentId === action.payload.segmentId
+          );
+          if (segmentIndex !== -1 && action.payload.content !== undefined) {
+            session.messages[segmentIndex].content = action.payload.content;
           }
-        }
-        
-        if (lastAssistantIndex !== -1) {
-          // Update existing assistant message
-          session.messages[lastAssistantIndex].content = action.payload.content;
         } else {
-          // No assistant message yet, create one
-          const message: ClaudeMessage = {
-            role: 'assistant',
-            content: action.payload.content,
-            timestamp: Date.now()
-          };
-          session.messages.push(message);
+          // Legacy behavior: Find the last assistant message
+          let lastAssistantIndex = -1;
+          for (let i = session.messages.length - 1; i >= 0; i--) {
+            if (session.messages[i].role === 'assistant') {
+              lastAssistantIndex = i;
+              break;
+            }
+          }
+          
+          if (lastAssistantIndex !== -1) {
+            // Update existing assistant message
+            const message = session.messages[lastAssistantIndex];
+            let hasChanges = false;
+            
+            if (action.payload.content !== undefined && message.content !== action.payload.content) {
+              message.content = action.payload.content;
+              hasChanges = true;
+              // Clear thinking active state when content arrives
+              if (action.payload.content && message.isThinkingActive) {
+                message.isThinkingActive = false;
+              }
+            }
+            // Update isThinkingActive if provided and different
+            if (action.payload.isThinkingActive !== undefined && message.isThinkingActive !== action.payload.isThinkingActive) {
+              message.isThinkingActive = action.payload.isThinkingActive;
+              hasChanges = true;
+            }
+            // Update messageId if provided and currently undefined
+            if (action.payload.messageId && !message.messageId) {
+              message.messageId = action.payload.messageId;
+              hasChanges = true;
+              console.log('[sessionSlice] Updated message with messageId:', action.payload.messageId);
+            }
+            
+            // Only update timestamp if there were actual changes
+            if (hasChanges) {
+              session.updatedAt = Date.now();
+            }
+          } else {
+            // No assistant message yet, create one
+            const message: ClaudeMessage = {
+              role: 'assistant',
+              content: action.payload.content || '',
+              timestamp: Date.now()
+            };
+            session.messages.push(message);
+          }
         }
         
         session.updatedAt = Date.now();
@@ -265,45 +322,70 @@ const sessionSlice = createSlice({
       }
     },
     
-    thinkingUpdated: (state, action: PayloadAction<{ content: string; currentLine?: string; isActive: boolean; duration?: number }>) => {
+    thinkingUpdated: (state, action: PayloadAction<{ content: string; currentLine?: string; isActive: boolean; duration?: number; messageId?: string | null }>) => {
       console.log('[sessionSlice] thinkingUpdated:', {
         content: action.payload.content?.substring(0, 50),
         currentLine: action.payload.currentLine,
         isActive: action.payload.isActive,
-        duration: action.payload.duration
+        duration: action.payload.duration,
+        messageId: action.payload.messageId
       });
       if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
       
       const session = state.sessions[state.currentSessionId];
       const messages = session.messages;
       
-      // Find the last assistant message
-      let lastAssistantIndex = -1;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'assistant') {
-          lastAssistantIndex = i;
-          break;
+      let targetIndex = -1;
+      
+      // If messageId provided, find that specific message
+      if (action.payload.messageId) {
+        console.log('[sessionSlice] Looking for message with ID:', action.payload.messageId);
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'assistant') {
+            console.log(`[sessionSlice] Checking message ${i} with messageId:`, messages[i].messageId);
+            if (messages[i].messageId === action.payload.messageId) {
+              targetIndex = i;
+              console.log('[sessionSlice] Found matching message at index:', i);
+              break;
+            }
+          }
         }
       }
-      if (lastAssistantIndex >= 0) {
+      
+      // Fall back to finding the last assistant message if no messageId or not found
+      if (targetIndex === -1) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'assistant') {
+            targetIndex = i;
+            // If we have a messageId and the message doesn't, update it
+            if (action.payload.messageId && !messages[i].messageId) {
+              messages[i].messageId = action.payload.messageId;
+              console.log('[sessionSlice] Assigned messageId to message at index:', i, 'messageId:', action.payload.messageId);
+            }
+            break;
+          }
+        }
+      }
+      if (targetIndex >= 0) {
         // Update thinking content (backend already accumulates)
         if (action.payload.content !== undefined) {
-          messages[lastAssistantIndex].thinking = action.payload.content;
+          messages[targetIndex].thinking = action.payload.content;
         }
         if (action.payload.duration !== undefined) {
-          messages[lastAssistantIndex].thinkingDuration = action.payload.duration;
+          messages[targetIndex].thinkingDuration = action.payload.duration;
         }
         if (action.payload.currentLine !== undefined) {
-          messages[lastAssistantIndex].currentThinkingLine = action.payload.currentLine;
+          messages[targetIndex].currentThinkingLine = action.payload.currentLine;
         }
         // Store thinking active state
-        messages[lastAssistantIndex].isThinkingActive = action.payload.isActive;
+        messages[targetIndex].isThinkingActive = action.payload.isActive;
         
         console.log('[sessionSlice] Updated message thinking state:', {
-          index: lastAssistantIndex,
-          isThinkingActive: messages[lastAssistantIndex].isThinkingActive,
-          thinkingDuration: messages[lastAssistantIndex].thinkingDuration,
-          contentLength: messages[lastAssistantIndex].thinking?.length
+          index: targetIndex,
+          messageId: messages[targetIndex].messageId,
+          isThinkingActive: messages[targetIndex].isThinkingActive,
+          thinkingDuration: messages[targetIndex].thinkingDuration,
+          contentLength: messages[targetIndex].thinking?.length
         });
         
         // Ensure activeSession is updated too with new reference for React
@@ -312,7 +394,7 @@ const sessionSlice = createSlice({
             ...state.activeSession,
             messages: [...state.activeSession.messages]
           };
-          state.activeSession.messages[lastAssistantIndex] = { ...messages[lastAssistantIndex] };
+          state.activeSession.messages[targetIndex] = { ...messages[targetIndex] };
           console.log('[sessionSlice] Updated activeSession thinking state');
         }
       }
@@ -360,6 +442,7 @@ const sessionSlice = createSlice({
       toolId: string;
       input: any;
       status: string;
+      segmentId?: string;
     }>) => {
       console.log('[sessionSlice] toolUseAdded:', action.payload);
       if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
@@ -367,16 +450,23 @@ const sessionSlice = createSlice({
       const session = state.sessions[state.currentSessionId];
       const messages = session.messages;
       
-      // Find the last assistant message
-      let lastAssistantIndex = -1;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'assistant') {
-          lastAssistantIndex = i;
-          break;
+      let targetIndex = -1;
+      
+      // If segmentId provided, find that specific segment
+      if (action.payload.segmentId) {
+        targetIndex = messages.findIndex(msg => msg.segmentId === action.payload.segmentId);
+      } else {
+        // Legacy: Find the last assistant message
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'assistant') {
+            targetIndex = i;
+            break;
+          }
         }
       }
-      if (lastAssistantIndex >= 0) {
-        const message = messages[lastAssistantIndex];
+      
+      if (targetIndex >= 0) {
+        const message = messages[targetIndex];
         if (!message.toolUses) {
           message.toolUses = [];
         }

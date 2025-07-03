@@ -22,7 +22,8 @@
       "Bash(claude:*)",
       "Bash(make:*)",
       "Bash(jq:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "WebFetch(domain:docs.anthropic.com)"
     ],
     "deny": []
   },
