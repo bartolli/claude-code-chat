@@ -44,6 +44,13 @@ export class ApplicationError extends Error {
   }
 }
 
+export class AbortError extends ApplicationError {
+  constructor(message = 'Operation aborted by user') {
+    super(message, ErrorCodes.USER_ABORTED, 'Abort', false);
+    this.name = 'AbortError';
+  }
+}
+
 export class ErrorBoundary {
   private static readonly logger = getLogger();
 
@@ -161,6 +168,9 @@ export const ErrorCodes = {
   MESSAGE_PARSE_FAILED: 'MESSAGE_PARSE_FAILED',
   WEBVIEW_NOT_READY: 'WEBVIEW_NOT_READY',
   TIMEOUT: 'TIMEOUT',
+  
+  // User actions
+  USER_ABORTED: 'USER_ABORTED',
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

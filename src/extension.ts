@@ -68,6 +68,24 @@ export function activate(context: vscode.ExtensionContext) {
             logger.info('Extension', 'Claude Code GUI extension activated');
         }
         
+        // Load test utilities in debug mode
+        if (context.extensionMode === vscode.ExtensionMode.Development) {
+            console.log('STEP3: Loading test utilities for development mode...');
+            outputChannel.appendLine('[Activation] Loading test utilities for development mode...');
+            
+            // Make ServiceContainer available globally for tests
+            (global as any).serviceContainer = services;
+            
+            try {
+                require('./debug-utils/abort-test-utils');
+                console.log('STEP3: Test utilities loaded! Use abortTest.* in Debug Console');
+                outputChannel.appendLine('[Activation] Test utilities loaded! Use abortTest.* in Debug Console');
+            } catch (error) {
+                console.error('STEP3: Failed to load test utilities:', error);
+                outputChannel.appendLine(`[Activation] Failed to load test utilities: ${error}`);
+            }
+        }
+        
     } catch (error) {
         console.error('STEP3: Failed to activate:', error);
         vscode.window.showErrorMessage(`Failed to activate: ${error}`);

@@ -73,6 +73,8 @@ compile:
 ## Build extension with webpack
 build-extension:
 	@echo "$(BLUE)Building extension with webpack...$(NC)"
+	@echo "$(YELLOW)→ Cleaning out directory$(NC)"
+	@rm -rf out/
 	@npm run build:extension
 	@echo "$(GREEN)✓ Extension bundled$(NC)"
 
@@ -110,6 +112,12 @@ clean:
 	@rm -rf node_modules/
 	@rm -f *.vsix
 	@echo "$(GREEN)✓ Clean complete$(NC)"
+
+## Clean only build output (preserves node_modules)
+clean-out:
+	@echo "$(BLUE)Cleaning out directory...$(NC)"
+	@rm -rf out/
+	@echo "$(GREEN)✓ Out directory cleaned$(NC)"
 
 ## Development mode
 dev:
@@ -197,6 +205,8 @@ bump-major:
 ## Development build with debug options
 dev-build:
 	@echo "$(BLUE)Building extension in development mode with source maps...$(NC)"
+	@echo "$(YELLOW)→ Cleaning out directory$(NC)"
+	@rm -rf out/
 	@echo "$(YELLOW)→ Using development webpack config$(NC)"
 	@npx webpack --config webpack.dev.config.js
 	@echo "$(YELLOW)→ Building webview in development mode$(NC)"

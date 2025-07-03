@@ -283,7 +283,7 @@ export const Chat: React.FC<ChatProps> = ({ messenger }) => {
                     onSubmit={handleSubmit}
                     onStop={() => {
                         console.log('Stop button clicked');
-                        messenger.post('chat/stop', {});
+                        messenger.post('chat/stopRequest', undefined);
                     }}
                     placeholder="Ask Claude anything..."
                     disabled={isProcessing}

@@ -17,11 +17,13 @@ export interface SpawnOptions extends ClaudeProcessOptions {
   wslDistro?: string;
   wslNodePath?: string;
   wslClaudePath?: string;
+  abortController?: AbortController; // Optional abort controller for cancellation
 }
 
 export class ClaudeProcessManager {
   private static readonly logger = getLogger();
   private processes: Map<string, ClaudeProcess> = new Map();
+  private abortControllers: Map<string, AbortController> = new Map(); // TODO: Test abort controller creation and storage
 
   /**
    * Spawn a new Claude process
@@ -37,8 +39,21 @@ export class ClaudeProcessManager {
     });
 
     try {
+      // Create or use provided AbortController
+      const abortController = options.abortController || new AbortController();
+      // TODO: Test passing custom abort controller
+      
+      // Store the abort controller for this session
+      this.abortControllers.set(sessionId, abortController);
+      // TODO: Verify controller is accessible after spawn
+      
+      ClaudeProcessManager.logger.info('ClaudeProcessManager', `Created/stored AbortController for session ${sessionId}`, {
+        isCustomController: options.abortController !== undefined,
+        totalControllers: this.abortControllers.size
+      });
+      
       const args = this.buildArguments(options);
-      const spawnOptions = this.buildSpawnOptions(cwd);
+      const spawnOptions = this.buildSpawnOptions(cwd, abortController.signal);
       
       let claudeProcess: cp.ChildProcess;
 
@@ -69,10 +84,41 @@ export class ClaudeProcessManager {
       };
 
       this.processes.set(sessionId, process);
+
+      // Add abort event listener
+      abortController.signal.addEventListener('abort', () => {
+        ClaudeProcessManager.logger.info('ClaudeProcessManager', `Abort signal received for session ${sessionId}`);
+        // TODO: Test abort event fires when controller.abort() called
+        
+        // Implement cleanup on abort
+        if (claudeProcess && !claudeProcess.killed) {
+          ClaudeProcessManager.logger.info('ClaudeProcessManager', `Sending SIGTERM to process ${claudeProcess.pid}`);
+          claudeProcess.kill('SIGTERM');
+          // TODO: Test process receives SIGTERM on abort
+        }
+      });
+
+      // Clean up abort controller on process exit
+      claudeProcess.on('exit', (code, signal) => {
+        ClaudeProcessManager.logger.info('ClaudeProcessManager', `Process exited for session ${sessionId}`, {
+          code,
+          signal,
+          wasAborted: abortController.signal.aborted
+        });
+        
+        // Clean up the process and abort controller
+        this.processes.delete(sessionId);
+        this.abortControllers.delete(sessionId);
+        // TODO: Test no memory leaks after abort
+      });
       
+      // Verify abort controller is accessible after spawn
+      const verifyController = this.getAbortController(sessionId);
       ClaudeProcessManager.logger.info('ClaudeProcessManager', `Claude process spawned successfully`, {
         sessionId,
-        pid: process.pid
+        pid: process.pid,
+        abortControllerAccessible: verifyController !== undefined,
+        abortControllerValid: verifyController instanceof AbortController
       });
 
       return ok(process);
@@ -129,6 +175,7 @@ export class ClaudeProcessManager {
         });
 
         this.processes.delete(sessionId);
+        this.abortControllers.delete(sessionId); // Clean up abort controller
         ClaudeProcessManager.logger.info('ClaudeProcessManager', `Claude process terminated`, { sessionId });
       },
       {
@@ -144,6 +191,19 @@ export class ClaudeProcessManager {
    */
   public getProcess(sessionId: string): ClaudeProcess | undefined {
     return this.processes.get(sessionId);
+  }
+
+  /**
+   * Get an abort controller by session ID
+   */
+  public getAbortController(sessionId: string): AbortController | undefined {
+    // TODO: Test retrieval of non-existent session
+    const controller = this.abortControllers.get(sessionId);
+    ClaudeProcessManager.logger.debug('ClaudeProcessManager', `Getting abort controller for session ${sessionId}`, {
+      found: controller !== undefined,
+      totalControllers: this.abortControllers.size
+    });
+    return controller;
   }
 
   /**
@@ -199,8 +259,8 @@ export class ClaudeProcessManager {
     return args;
   }
 
-  private buildSpawnOptions(cwd?: string): cp.SpawnOptions {
-    return {
+  private buildSpawnOptions(cwd?: string, signal?: AbortSignal): cp.SpawnOptions {
+    const options: cp.SpawnOptions = {
       cwd: cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { 
@@ -209,6 +269,14 @@ export class ClaudeProcessManager {
         NO_COLOR: '1' 
       }
     };
+
+    // Add abort signal if provided
+    if (signal) {
+      options.signal = signal;
+      // TODO: Test signal is properly passed to spawn
+    }
+
+    return options;
   }
 
   private async spawnWslProcess(

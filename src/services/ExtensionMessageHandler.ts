@@ -8,11 +8,14 @@ import { SimpleWebviewProtocol } from '../protocol/SimpleWebviewProtocol';
 import { FromWebviewMessageType, FromWebviewProtocol } from '../protocol/types';
 import { StreamProcessor } from './StreamProcessor';
 import { ChunkedJSONParser } from './ChunkedJSONParser';
-import { ClaudeStreamMessage } from '../types/claude';
+import { ClaudeStreamMessage, ModelType } from '../types/claude';
 import { Readable } from 'stream';
 import { mcpService } from './McpService';
 import { mcpClientService } from './McpClientService';
 import { MessageSegmenter } from './MessageSegmenter';
+import { ClaudeProcessManager } from './ClaudeProcessManager';
+import { ServiceContainer as NewServiceContainer } from './ServiceContainer';
+import { ClaudeProcessAdapter } from '../types/process-adapter';
 
 /**
  * Simplified ExtensionMessageHandler for compilation
@@ -25,7 +28,7 @@ export class ExtensionMessageHandler {
     private jsonParser: ChunkedJSONParser;
     private messageSegmenter: MessageSegmenter;
     private currentSessionId: string | null = null;
-    private currentClaudeProcess: cp.ChildProcess | null = null;
+    private currentClaudeProcess: ClaudeProcessAdapter | null = null;
     private pendingPermissionResponses: Map<string, (response: string) => void> = new Map();
     private thinkingStartTime: number | null = null;
     private accumulatedThinking: string = '';
@@ -36,6 +39,8 @@ export class ExtensionMessageHandler {
     private hasCreatedAssistantMessage: boolean = false;
     private thinkingMessageId: string | null = null;
     private currentAssistantMessageId: string | null = null;
+    private processManager: ClaudeProcessManager;
+    private currentAbortController: AbortController | null = null; // TODO: Test controller reference is maintained
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -44,6 +49,7 @@ export class ExtensionMessageHandler {
         this.logger = serviceContainer.get('Logger') as Logger;
         this.streamProcessor = serviceContainer.get('StreamProcessor') as StreamProcessor;
         this.jsonParser = serviceContainer.get('ChunkedJSONParser') as ChunkedJSONParser;
+        this.processManager = serviceContainer.get('ClaudeProcessManager') as ClaudeProcessManager;
         this.messageSegmenter = new MessageSegmenter();
         
         // Get or create output channel
@@ -74,14 +80,14 @@ export class ExtensionMessageHandler {
         switch (type) {
             case 'chat/sendMessage':
                 this.logger.info('ExtensionMessageHandler', 'Sending message to Claude', data);
-                await this.handleChatMessage(data as any);
-                return undefined as any;
+                await this.handleChatMessage(data as FromWebviewProtocol['chat/sendMessage'][0]);
+                return;
             
             case 'chat/newSession':
                 this.logger.info('ExtensionMessageHandler', 'New session requested');
                 this.currentSessionId = null;
                 this.outputChannel.appendLine(`[DEBUG] Session cleared - next message will start new session`);
-                return undefined as any;
+                return;
             
             case 'settings/get':
                 // Return current settings
@@ -89,61 +95,62 @@ export class ExtensionMessageHandler {
                     selectedModel: this.context.workspaceState.get('selectedModel', 'default'),
                     autoSave: this.context.workspaceState.get('autoSave', true),
                     gitBackup: this.context.workspaceState.get('gitBackup', false)
-                } as any;
+                };
                 
             case 'settings/update':
                 // Update settings
-                const settings = data as any;
+                const settings = data as FromWebviewProtocol['settings/update'][0];
                 if (settings.selectedModel) {
                     await this.context.workspaceState.update('selectedModel', settings.selectedModel);
                 }
-                return {} as any;
+                return {};
                 
             case 'settings/selectModel':
                 // Update selected model
-                const { modelId } = data as any;
-                await this.context.workspaceState.update('selectedModel', modelId);
-                this.logger.info('ExtensionMessageHandler', 'Model selected', { modelId });
-                return {} as any;
+                const { model } = data as FromWebviewProtocol['settings/selectModel'][0];
+                await this.context.workspaceState.update('selectedModel', model);
+                this.logger.info('ExtensionMessageHandler', 'Model selected', { model });
+                return {};
                 
             case 'conversation/getList':
                 // Return empty conversation list for now
                 this.logger.info('ExtensionMessageHandler', 'Getting conversation list');
                 return {
                     conversations: []
-                } as any;
+                };
                 
             case 'mcp/getServers':
                 // Get MCP servers and send them to the UI
                 this.logger.info('ExtensionMessageHandler', 'Getting MCP servers');
                 await this.loadAndSendMcpServers();
-                return undefined as any;
+                return;
             
             case 'permission/response':
                 // Handle permission response
-                const permissionData = data as any;
+                const permissionData = data as FromWebviewProtocol['permission/response'][0];
                 this.logger.info('ExtensionMessageHandler', 'Permission response', permissionData);
                 this.handlePermissionResponse(permissionData);
-                return undefined as any;
+                return;
             
             case 'plan/approve':
                 this.logger.info('ExtensionMessageHandler', 'Plan approved', data);
                 this.outputChannel.appendLine(`[Plan] User approved plan`);
                 
-                const { sessionId } = data as any;
+                const { toolId } = data as FromWebviewProtocol['plan/approve'][0];
                 // Create approval file for hook
-                const approvalPath = `/tmp/claude-plan-approval-${sessionId || this.currentSessionId}`;
+                const approvalPath = `/tmp/claude-plan-approval-${toolId || this.currentSessionId}`;
                 await fs.promises.writeFile(approvalPath, '');
                 
                 // Tell Claude to continue (retry exit_plan_mode)
                 await this.handleChatMessage({ 
                     text: "Please continue with the plan.",
-                    planMode: true
+                    planMode: true,
+                    thinkingMode: false
                 });
                 
                 // Update UI
                 this.webviewProtocol?.post('planMode/toggle', false);
-                return undefined as any;
+                return;
                 
             case 'plan/refine':
                 this.logger.info('ExtensionMessageHandler', 'Plan refinement requested', data);
@@ -151,15 +158,28 @@ export class ExtensionMessageHandler {
                 
                 // User will provide refinement instructions
                 // Just focus the input
-                return undefined as any;
+                return;
             
             case 'chat/stopRequest':
-                // Handle stop request - send ESC to Claude process
+                // Handle stop request using AbortController
                 this.logger.info('ExtensionMessageHandler', 'Stop requested');
                 this.outputChannel.appendLine(`[Stop] User requested to stop Claude`);
                 
-                if (this.currentClaudeProcess && this.currentClaudeProcess.stdin) {
-                    // Send ESC character to abort while preserving session context
+                if (this.currentAbortController && this.currentClaudeProcess) {
+                    // Only abort if we have an active process running
+                    this.outputChannel.appendLine(`[Stop] Using AbortController to stop process`);
+                    this.currentAbortController.abort();
+                    // TODO: Test stop button triggers abort
+                    
+                    // Clear the controller reference to prevent reuse
+                    this.currentAbortController = null;
+                    
+                    // Update UI to show stopped state
+                    this.webviewProtocol?.post('status/processing', false);
+                    this.outputChannel.appendLine(`[Stop] Abort signal sent`);
+                } else if (this.currentClaudeProcess && this.currentClaudeProcess.stdin) {
+                    // Fallback to ESC character if no abort controller
+                    this.outputChannel.appendLine(`[Stop] No AbortController, falling back to ESC`);
                     this.currentClaudeProcess.stdin.write('\x1b');
                     this.outputChannel.appendLine(`[Stop] Sent ESC to Claude process`);
                     
@@ -168,11 +188,11 @@ export class ExtensionMessageHandler {
                 } else {
                     this.outputChannel.appendLine(`[Stop] No active Claude process to stop`);
                 }
-                return undefined as any;
+                return;
             
             default:
                 this.logger.warn('ExtensionMessageHandler', `Unhandled message type: ${type}`);
-                return undefined as any;
+                return;
         }
     }
 
@@ -229,36 +249,17 @@ export class ExtensionMessageHandler {
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             const cwd = workspaceFolder ? workspaceFolder.uri.fsPath : process.cwd();
             
-            // Build Claude CLI arguments
-            // Use -p flag without message (will send via stdin)
-            // IMPORTANT: --verbose is required when using --output-format stream-json with -p
-            const args = ['-p'];
-            
-            // If we have an existing session, use --resume
+            // Note: ClaudeProcessManager will build the arguments
+            // We just need to ensure we use --resume if we have a session
             if (this.currentSessionId) {
-                args.push('--resume', this.currentSessionId);
                 this.outputChannel.appendLine(`[DEBUG] Resuming session: ${this.currentSessionId}`);
             } else {
                 this.outputChannel.appendLine(`[DEBUG] Starting new session`);
             }
             
-            args.push('--output-format', 'stream-json', '--verbose');
-            
-            // Skip permission prompts to avoid blocking the process
-            args.push('--dangerously-skip-permissions');
-            
-            // Add plan mode if requested
+            // TODO: Add plan mode support to ClaudeProcessOptions
             if (data.planMode) {
-                args.push('--permission-mode', 'plan');
-                
-                // Append system prompt to ensure Claude uses exit_plan_mode
-                args.push('--append-system-prompt', 
-                    'When you have finished analyzing the request and are ready to present your implementation plan, ' +
-                    'you MUST call the exit_plan_mode tool with your complete plan. ' +
-                    'The exit_plan_mode tool is required to present plans for user approval in plan mode.'
-                );
-                
-                this.outputChannel.appendLine('[DEBUG] Plan mode enabled with exit_plan_mode instructions');
+                this.outputChannel.appendLine('[DEBUG] Plan mode requested - needs implementation in ClaudeProcessManager');
             }
             
             // Note: When using stdin, -p should not have the prompt as argument
@@ -279,15 +280,11 @@ export class ExtensionMessageHandler {
             const apiKey = config.get<string>('apiKey') || process.env.ANTHROPIC_API_KEY;
             this.outputChannel.appendLine(`API key configured: ${apiKey ? 'Yes' : 'No'}`);
             
-            // Add model if not default
-            if (selectedModel && selectedModel !== 'default') {
-                args.push('--model', selectedModel as string);
-            }
+            // Model will be passed to ClaudeProcessManager
             
-            // Log the full command for debugging
-            const fullCommand = `claude ${args.join(' ')}`;
-            this.logger.info('ExtensionMessageHandler', `Running command: ${fullCommand}`);
-            this.outputChannel.appendLine(`\nExecuting command: ${fullCommand}`);
+            // Log the command info
+            this.logger.info('ExtensionMessageHandler', `Using ClaudeProcessManager to spawn Claude`);
+            this.outputChannel.appendLine(`\nUsing ClaudeProcessManager to spawn Claude process`);
             this.outputChannel.appendLine(`Working directory: ${cwd}`);
             
             // Test McpService - Log MCP configuration
@@ -381,8 +378,8 @@ export class ExtensionMessageHandler {
                         this.outputChannel.appendLine(`[DEBUG] Fallback command succeeded - using --chat mode`);
                         this.outputChannel.appendLine(`[DEBUG] Fallback output: ${fallbackResult.substring(0, 200)}...`);
                         // If this works, we should use --chat mode
-                        args[0] = '--chat';
-                        args.splice(1, 0, '--dir', cwd);
+                        // TODO: Add support for --chat mode in ClaudeProcessManager
+                        this.outputChannel.appendLine(`[DEBUG] --chat mode might work better`);
                     } catch (fallbackError: any) {
                         this.outputChannel.appendLine(`[ERROR] Fallback also failed: ${fallbackError.message}`);
                     }
@@ -404,9 +401,9 @@ export class ExtensionMessageHandler {
             
             // Debug: show exact spawn parameters
             this.outputChannel.appendLine(`\n[DEBUG] === SPAWN PARAMETERS ===`);
-            this.outputChannel.appendLine(`[DEBUG] Command: claude`);
-            this.outputChannel.appendLine(`[DEBUG] Args: ${JSON.stringify(args)}`);
+            this.outputChannel.appendLine(`[DEBUG] Using ClaudeProcessManager`);
             this.outputChannel.appendLine(`[DEBUG] CWD: ${cwd}`);
+            this.outputChannel.appendLine(`[DEBUG] Model: ${selectedModel}`);
             this.outputChannel.appendLine(`[DEBUG] ANTHROPIC_API_KEY: ${processEnv.ANTHROPIC_API_KEY ? 'Set' : 'Not set'}`);
             this.outputChannel.appendLine(`[DEBUG] PATH: ${processEnv.PATH}`);
             this.outputChannel.appendLine(`[DEBUG] NODE_PATH: ${processEnv.NODE_PATH || 'Not set'}`);
@@ -435,18 +432,50 @@ export class ExtensionMessageHandler {
                 }
             }
             
-            // Use simple spawn like the original extension
-            const claudeProcess = cp.spawn(claudePath, args, {
+            // Generate session ID if we don't have one
+            const sessionId = this.currentSessionId || `session_${Date.now()}`;
+            
+            // Create AbortController for this session
+            const abortController = new AbortController();
+            this.currentAbortController = abortController;
+            // TODO: Test controller passed to ClaudeProcessManager
+            
+            // Use ClaudeProcessManager to spawn process
+            this.outputChannel.appendLine(`[DEBUG] Using ClaudeProcessManager to spawn Claude`);
+            const spawnResult = await this.processManager.spawn({
+                sessionId: sessionId,
+                model: selectedModel as ModelType,
                 cwd: cwd,
-                stdio: ['pipe', 'pipe', 'pipe'],
-                env: processEnv
+                resumeSession: this.currentSessionId || undefined,
+                verbose: true,
+                dangerouslySkipPermissions: true,
+                abortController: abortController
             });
             
-            // Store the current process for permission handling
-            this.currentClaudeProcess = claudeProcess;
+            if (!spawnResult.ok) {
+                // Check if this was due to abort
+                if (this.currentAbortController?.signal.aborted || 
+                    spawnResult.error.message.includes('aborted')) {
+                    this.outputChannel.appendLine(`[Stop] Process spawn was aborted`);
+                    this.logger.info('ExtensionMessageHandler', 'Spawn aborted by user');
+                    this.webviewProtocol?.post('status/processing', false);
+                    return;
+                }
+                
+                this.outputChannel.appendLine(`[ERROR] Failed to spawn Claude: ${spawnResult.error.message}`);
+                this.webviewProtocol?.post('error/show', {
+                    message: `Failed to start Claude: ${spawnResult.error.message}`
+                });
+                return;
+            }
+            
+            const claudeProcess = spawnResult.value;
+            
+            // Store the current process for permission handling using adapter
+            this.currentClaudeProcess = new ClaudeProcessAdapter(claudeProcess);
             
             this.outputChannel.appendLine(`[Process] Spawned with PID: ${claudeProcess.pid}`);
-            this.outputChannel.appendLine(`[Process] Connected: ${claudeProcess.connected}`);
+            this.outputChannel.appendLine(`[Process] Connected: true`);
             
             // Add timeout to detect hanging process (10 minutes for long operations)
             const PROCESS_TIMEOUT_MS = 600000; // 10 minutes
@@ -455,7 +484,7 @@ export class ExtensionMessageHandler {
             const timeout = setTimeout(() => {
                 const inactiveTime = Date.now() - lastActivityTime;
                 this.outputChannel.appendLine(`[WARNING] Process timeout after ${PROCESS_TIMEOUT_MS/1000} seconds (inactive for ${inactiveTime/1000}s)`);
-                if (claudeProcess.killed === false) {
+                if (this.currentClaudeProcess && !this.currentClaudeProcess.killed) {
                     this.outputChannel.appendLine(`[WARNING] Killing hanging process`);
                     claudeProcess.kill();
                     this.webviewProtocol?.post('error/show', {
@@ -472,10 +501,22 @@ export class ExtensionMessageHandler {
             // Handle errors
             claudeProcess.on('error', (error) => {
                 clearTimeout(timeout);
+                
+                // Check if this was due to abort
+                if (this.currentAbortController?.signal.aborted || 
+                    error.message?.includes('aborted')) {
+                    this.outputChannel.appendLine(`[Stop] Process error due to abort`);
+                    return;
+                }
+                
                 this.logger.error('ExtensionMessageHandler', 'Failed to spawn claude', error);
                 this.outputChannel.appendLine(`[ERROR] Failed to spawn: ${error.message}`);
-                this.outputChannel.appendLine(`[ERROR] Error code: ${(error as any).code}`);
-                this.outputChannel.appendLine(`[ERROR] Error path: ${(error as any).path}`);
+                if ('code' in error) {
+                    this.outputChannel.appendLine(`[ERROR] Error code: ${error.code}`);
+                }
+                if ('path' in error) {
+                    this.outputChannel.appendLine(`[ERROR] Error path: ${error.path}`);
+                }
                 this.webviewProtocol?.post('error/show', {
                     message: `Failed to start Claude: ${error.message}. Make sure Claude CLI is installed and available in PATH.`
                 });
@@ -483,6 +524,10 @@ export class ExtensionMessageHandler {
             
             // Set encoding for stderr
             claudeProcess.stderr?.setEncoding('utf8');
+            
+            // Track if we've received any data
+            let receivedData = false;
+            let jsonBuffer = '';
             
             // Capture stderr for debugging and permission prompts
             let stderrData = '';
@@ -529,14 +574,14 @@ export class ExtensionMessageHandler {
             
             // Check if process is still running after a short delay
             setTimeout(() => {
-                if (!receivedData && claudeProcess.exitCode === null) {
+                if (!receivedData && this.currentClaudeProcess && this.currentClaudeProcess.exitCode === null) {
                     this.outputChannel.appendLine(`[WARNING] No data received after 2 seconds`);
-                    this.outputChannel.appendLine(`[WARNING] Process still running: ${!claudeProcess.killed}`);
-                    this.outputChannel.appendLine(`[WARNING] Exit code: ${claudeProcess.exitCode}`);
+                    this.outputChannel.appendLine(`[WARNING] Process still running: ${!this.currentClaudeProcess.killed}`);
+                    this.outputChannel.appendLine(`[WARNING] Exit code: ${this.currentClaudeProcess.exitCode}`);
                     this.outputChannel.appendLine(`[WARNING] PID: ${claudeProcess.pid}`);
                     
                     // Check process state
-                    if (claudeProcess.stdout) {
+                    if (claudeProcess.stdout && claudeProcess.stdout instanceof Readable) {
                         this.outputChannel.appendLine(`[WARNING] Stdout readable: ${claudeProcess.stdout.readable}`);
                         this.outputChannel.appendLine(`[WARNING] Stdout destroyed: ${claudeProcess.stdout.destroyed}`);
                     }
@@ -570,7 +615,7 @@ export class ExtensionMessageHandler {
             let assistantContent = '';
             let isStreaming = false;
             let messageId: string | undefined;
-            let sessionId: string | undefined;
+            let processSessionId: string | undefined; // Renamed to avoid conflict
             let totalCost: number = 0;
             let apiKeySource: string | undefined;
             
@@ -580,10 +625,6 @@ export class ExtensionMessageHandler {
             
             // Set encoding for stdout
             claudeProcess.stdout?.setEncoding('utf8');
-            
-            // Track if we've received any data
-            let receivedData = false;
-            let jsonBuffer = '';
             
             // Process output stream
             if (claudeProcess.stdout) {
@@ -637,7 +678,7 @@ export class ExtensionMessageHandler {
                                     // Keep track of all content for backwards compatibility
                                     assistantContent += content;
                                 }, (metadata) => {
-                                    if (metadata.sessionId) sessionId = metadata.sessionId;
+                                    if (metadata.sessionId) processSessionId = metadata.sessionId;
                                     if (metadata.messageId) messageId = metadata.messageId;
                                     if (metadata.totalCost !== undefined) totalCost = metadata.totalCost;
                                     if (metadata.apiKeySource) apiKeySource = metadata.apiKeySource;
@@ -689,6 +730,25 @@ export class ExtensionMessageHandler {
             claudeProcess.on('exit', (code, signal) => {
                 clearTimeout(timeout);
                 this.outputChannel.appendLine(`\n[Process Exit] Code: ${code}, Signal: ${signal}`);
+                
+                // Check if this was an abort
+                const wasAborted = this.currentAbortController?.signal.aborted || false;
+                // TODO: Test UI shows stopped state
+                
+                if (wasAborted || code === 143) {
+                    // Handle user-initiated abort differently
+                    // Exit code 143 = 128 + 15 (SIGTERM)
+                    this.outputChannel.appendLine(`[Process Exit] User aborted the process`);
+                    this.logger.info('ExtensionMessageHandler', 'Process aborted by user');
+                    
+                    // Update UI to show stopped state without error
+                    this.webviewProtocol?.post('status/processing', false);
+                    // TODO: Test no error shown on manual abort
+                    
+                    // Don't show error message for user-initiated abort
+                    return;
+                }
+                
                 if (code !== 0) {
                     this.logger.error('ExtensionMessageHandler', `Claude process exited with code: ${code}`);
                     this.outputChannel.appendLine(`[ERROR] Process failed with exit code ${code}`);
@@ -752,9 +812,22 @@ export class ExtensionMessageHandler {
                 this.hasCreatedAssistantMessage = false;
                 this.currentAssistantMessageId = null;
                 this.thinkingMessageId = null;
+                
+                // Clean up process references
+                this.currentClaudeProcess = null;
+                this.currentAbortController = null;
             });
             
         } catch (error: any) {
+            // Check if this was an abort
+            if (this.currentAbortController?.signal.aborted || 
+                error.message?.includes('aborted')) {
+                this.outputChannel.appendLine(`[Stop] Operation aborted`);
+                this.logger.info('ExtensionMessageHandler', 'Operation aborted by user');
+                this.webviewProtocol?.post('status/processing', false);
+                return;
+            }
+            
             this.logger.error('ExtensionMessageHandler', 'Error handling chat message', error);
             this.webviewProtocol?.post('error/show', {
                 message: `Failed to send message: ${error.message || error}`
@@ -1338,7 +1411,7 @@ export class ExtensionMessageHandler {
                         break;
                         
                     default:
-                        this.outputChannel.appendLine(`[StreamProcessor] Unknown message type: ${(json as any).type}`);
+                        this.outputChannel.appendLine(`[StreamProcessor] Unknown message type: ${(json as ClaudeStreamMessage).type || 'undefined'}`);
                 }
             }
             
