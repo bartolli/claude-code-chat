@@ -444,11 +444,20 @@ export class ExtensionMessageHandler {
             
             // Use ClaudeProcessManager to spawn process
             this.outputChannel.appendLine(`[DEBUG] Using ClaudeProcessManager to spawn Claude`);
+            
+            // Always use --continue for current session continuity
+            let resumeOption: string | undefined = undefined;
+            if (this.currentSessionId) {
+                // Use --continue for the most recent conversation
+                resumeOption = 'continue';
+                this.outputChannel.appendLine(`[DEBUG] Using --continue flag for current session`);
+            }
+            
             const spawnResult = await this.processManager.spawn({
                 sessionId: sessionId,
                 model: selectedModel as ModelType,
                 cwd: cwd,
-                resumeSession: this.currentSessionId || undefined,
+                resumeSession: resumeOption,
                 verbose: true,
                 dangerouslySkipPermissions: true,
                 abortController: abortController

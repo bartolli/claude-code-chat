@@ -239,7 +239,12 @@ export class ClaudeProcessManager {
     }
     
     if (options.resumeSession) {
-      args.push('--resume', options.resumeSession);
+      // Special case: if resumeSession is 'continue', use --continue flag
+      if (options.resumeSession === 'continue') {
+        args.push('--continue');
+      } else {
+        args.push('--resume', options.resumeSession);
+      }
     }
     
     if (options.dangerouslySkipPermissions) {
