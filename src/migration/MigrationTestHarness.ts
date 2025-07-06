@@ -189,8 +189,13 @@ export class MigrationTestHarness {
     private async testComprehensiveActions(): Promise<TestResult> {
         this.outputChannel.appendLine('Testing comprehensive action mapping...');
         
-        // Test all actions from the analysis document
-        const criticalActions = [
+        // Enable action mapping temporarily
+        const originalFlag = this.featureFlags.isEnabled('enableActionMapping');
+        await this.featureFlags.setFlag('enableActionMapping', true);
+        
+        try {
+            // Test all actions from the analysis document
+            const criticalActions = [
             // Session actions marked with ✅
             { type: 'session/messageAdded', payload: { role: 'user', content: 'test' } },
             { type: 'session/messageUpdated', payload: { content: 'updated' } },
@@ -248,19 +253,23 @@ export class MigrationTestHarness {
             }
         }
         
-        this.outputChannel.appendLine(`\nSummary:`);
-        this.outputChannel.appendLine(`  Mapped: ${results.mapped.length} actions`);
-        this.outputChannel.appendLine(`  Need custom handler: ${results.customHandler.length} actions`);
-        this.outputChannel.appendLine(`  Unmapped: ${results.unmapped.length} actions`);
-        this.outputChannel.appendLine(`  Failed: ${results.failed.length} actions`);
-        
-        const stats = this.actionMapper.getStatistics();
-        
-        return {
-            success: results.failed.length === 0,
-            message: `Tested ${criticalActions.length} actions: ${results.mapped.length} mapped, ${results.customHandler.length} need handlers, ${results.unmapped.length} unmapped`,
-            details: { results, stats }
-        };
+            this.outputChannel.appendLine(`\nSummary:`);
+            this.outputChannel.appendLine(`  Mapped: ${results.mapped.length} actions`);
+            this.outputChannel.appendLine(`  Need custom handler: ${results.customHandler.length} actions`);
+            this.outputChannel.appendLine(`  Unmapped: ${results.unmapped.length} actions`);
+            this.outputChannel.appendLine(`  Failed: ${results.failed.length} actions`);
+            
+            const stats = this.actionMapper.getStatistics();
+            
+            return {
+                success: results.failed.length === 0,
+                message: `Tested ${criticalActions.length} actions: ${results.mapped.length} mapped, ${results.customHandler.length} need handlers, ${results.unmapped.length} unmapped`,
+                details: { results, stats }
+            };
+        } finally {
+            // Restore original flag
+            await this.featureFlags.setFlag('enableActionMapping', originalFlag);
+        }
     }
     
     /**
