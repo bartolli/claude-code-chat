@@ -57,6 +57,21 @@
         "title": "Open Claude Code GUI",
         "category": "Claude Code GUI",
         "icon": "icon.png"
+      },
+      {
+        "command": "claude-code-chat.migration.showFlags",
+        "title": "Show Migration Feature Flags",
+        "category": "Claude Code Migration"
+      },
+      {
+        "command": "claude-code-chat.migration.toggleStateManager",
+        "title": "Toggle Redux StateManager",
+        "category": "Claude Code Migration"
+      },
+      {
+        "command": "claude-code-chat.migration.resetFlags",
+        "title": "Reset Migration Flags",
+        "category": "Claude Code Migration"
       }
     ],
     "keybindings": [
@@ -195,6 +210,48 @@
           "default": "",
           "description": "Anthropic API key (optional - can also be set via ANTHROPIC_API_KEY environment variable)",
           "markdownDescription": "Your Anthropic API key. Get one from [console.anthropic.com](https://console.anthropic.com/). Can also be set via `ANTHROPIC_API_KEY` environment variable."
+        },
+        "claude-code-chat.migration.useReduxStateManager": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Redux StateManager (migration flag)"
+        },
+        "claude-code-chat.migration.enableParallelStateValidation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable parallel state validation during migration"
+        },
+        "claude-code-chat.migration.logStateTransitions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log all state transitions for debugging"
+        },
+        "claude-code-chat.migration.enableActionMapping": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable action mapping layer"
+        },
+        "claude-code-chat.migration.rolloutPercentage": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of users to enable Redux StateManager for (0-100)"
+        },
+        "claude-code-chat.migration.logUnmappedActions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Log unmapped actions during migration"
+        },
+        "claude-code-chat.migration.logStateDiscrepancies": {
+          "type": "boolean",
+          "default": true,
+          "description": "Log state discrepancies between SimpleStateManager and StateManager"
+        },
+        "claude-code-chat.migration.enablePerformanceMetrics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable performance metrics collection"
         }
       }
     }

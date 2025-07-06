@@ -24,7 +24,8 @@
       "Bash(jq:*)",
       "Bash(cp:*)",
       "WebFetch(domain:docs.anthropic.com)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   },
