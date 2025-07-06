@@ -7,12 +7,14 @@
     "project": "./tsconfig.json"
   },
   "plugins": [
-    "@typescript-eslint"
+    "@typescript-eslint",
+    "jsdoc"
   ],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
-    "plugin:@typescript-eslint/recommended-requiring-type-checking"
+    "plugin:@typescript-eslint/recommended-requiring-type-checking",
+    "plugin:jsdoc/recommended-typescript"
   ],
   "rules": {
     "@typescript-eslint/naming-convention": [
@@ -33,7 +35,31 @@
     "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/no-non-null-assertion": "warn",
     "@typescript-eslint/prefer-nullish-coalescing": "error",
-    "@typescript-eslint/prefer-optional-chain": "error"
+    "@typescript-eslint/prefer-optional-chain": "error",
+    "jsdoc/require-jsdoc": [
+      "error",
+      {
+        "require": {
+          "FunctionDeclaration": true,
+          "MethodDefinition": true,
+          "ClassDeclaration": true,
+          "ArrowFunctionExpression": false,
+          "FunctionExpression": false
+        },
+        "contexts": [
+          "TSMethodSignature",
+          "TSPropertySignature"
+        ]
+      }
+    ],
+    "jsdoc/require-description": "warn",
+    "jsdoc/require-param": "error",
+    "jsdoc/require-param-description": "warn",
+    "jsdoc/require-returns": "error",
+    "jsdoc/require-returns-description": "warn",
+    "jsdoc/check-alignment": "error",
+    "jsdoc/check-param-names": "error",
+    "jsdoc/check-tag-names": "error"
   },
   "ignorePatterns": [
     "out",
