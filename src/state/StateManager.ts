@@ -12,7 +12,17 @@ import {
   addMessage,
   updateTokenUsage,
   setLoading,
-  setError 
+  setError,
+  messageAdded,
+  messageUpdated,
+  messageCompleted,
+  thinkingUpdated,
+  tokenUsageUpdated,
+  toolUseAdded,
+  toolResultAdded,
+  clearSession,
+  deleteSession,
+  loadSessions
 } from './slices/sessionSlice';
 import { 
   setSelectedModel,
@@ -23,12 +33,23 @@ import {
   setWebviewReady,
   setClaudeRunning,
   setShowThinking,
-  setShowCost 
+  setShowCost,
+  showPermissionRequest,
+  clearPermissionRequest,
+  resetUI
 } from './slices/uiSlice';
 import {
   addProcess,
   removeProcess
 } from './slices/processesSlice';
+import {
+  setProcessing
+} from './slices/claudeSlice';
+import {
+  updateConnectedServers,
+  setMcpServers,
+  updateServerStatus
+} from './slices/mcpSlice';
 import { ClaudeMessage, ClaudeResultMessage } from '../types/claude';
 
 export class StateManager {
@@ -249,5 +270,78 @@ export class StateManager {
       }), { input: 0, output: 0 });
     
     return totals;
+  }
+
+  // Additional methods for current webview compatibility
+
+  /**
+   * Handle message addition (matches webview messageAdded action)
+   */
+  public addMessageToSession(message: { role: 'user' | 'assistant'; content: string; messageId?: string; isThinkingActive?: boolean }): void {
+    this.dispatch(messageAdded(message));
+  }
+
+  /**
+   * Update message (matches webview messageUpdated action)
+   */
+  public updateMessage(message: { role: 'assistant'; content?: string; isThinkingActive?: boolean; messageId?: string }): void {
+    this.dispatch(messageUpdated(message));
+  }
+
+  /**
+   * Update thinking state (matches webview thinkingUpdated action)
+   */
+  public updateThinking(data: { content: string; currentLine?: string; isActive: boolean; duration?: number; messageId?: string; isIncremental?: boolean }): void {
+    this.dispatch(thinkingUpdated(data));
+  }
+
+  /**
+   * Add tool use (matches webview toolUseAdded action)
+   */
+  public addToolUse(data: { toolName: string; toolId: string; input: any; status: string; parentToolUseId?: string }): void {
+    this.dispatch(toolUseAdded(data));
+  }
+
+  /**
+   * Add tool result (matches webview toolResultAdded action)
+   */
+  public addToolResult(data: { toolId: string; result: string; isError?: boolean; status: string; parentToolUseId?: string }): void {
+    this.dispatch(toolResultAdded(data));
+  }
+
+  /**
+   * Update token usage (matches webview tokenUsageUpdated action)
+   */
+  public updateTokens(data: { inputTokens: number; outputTokens: number; thinkingTokens?: number; cacheTokens?: number }): void {
+    this.dispatch(tokenUsageUpdated(data));
+  }
+
+  /**
+   * Set processing state (matches webview claude/setProcessing action)
+   */
+  public setProcessingState(processing: boolean): void {
+    this.dispatch(setProcessing(processing));
+  }
+
+  /**
+   * Show error (handled through generic dispatch)
+   */
+  public showErrorMessage(message: string): void {
+    // Use generic dispatch since showError isn't exported
+    this.dispatch({ type: 'ui/showError', payload: { message } });
+  }
+
+  /**
+   * Complete message (matches webview messageCompleted action)
+   */
+  public completeMessage(): void {
+    this.dispatch(messageCompleted());
+  }
+
+  /**
+   * Update MCP servers (matches webview mcp/updateConnectedServers action)
+   */
+  public updateMcpServers(servers: any[]): void {
+    this.dispatch(updateConnectedServers(servers));
   }
 }
