@@ -72,6 +72,21 @@ export function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(disposable);
         console.log('STEP3: Command registered successfully');
         
+        // Register migration commands
+        try {
+            const { FeatureFlagManager } = require('./migration/FeatureFlags');
+            const { MigrationTestHarness } = require('./migration/MigrationTestHarness');
+            
+            FeatureFlagManager.registerCommands(context);
+            MigrationTestHarness.registerCommands(context);
+            
+            console.log('STEP3: Migration commands registered');
+            outputChannel.appendLine('[Activation] Migration commands registered');
+        } catch (error) {
+            console.error('STEP3: Failed to register migration commands:', error);
+            outputChannel.appendLine(`[Activation] Failed to register migration commands: ${error}`);
+        }
+        
         // If we have logger, use it
         if (logger) {
             logger.info('Extension', 'Claude Code GUI extension activated');

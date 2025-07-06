@@ -72,6 +72,16 @@
         "command": "claude-code-chat.migration.resetFlags",
         "title": "Reset Migration Flags",
         "category": "Claude Code Migration"
+      },
+      {
+        "command": "claude-code-chat.migration.runTests",
+        "title": "Run Migration Tests",
+        "category": "Claude Code Migration"
+      },
+      {
+        "command": "claude-code-chat.migration.testScenario",
+        "title": "Test Migration Scenario",
+        "category": "Claude Code Migration"
       }
     ],
     "keybindings": [
