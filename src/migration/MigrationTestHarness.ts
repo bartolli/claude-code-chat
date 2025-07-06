@@ -34,6 +34,8 @@ export class MigrationTestHarness {
             switch (scenarioName) {
                 case 'action-mapping':
                     return await this.testActionMapping();
+                case 'comprehensive-actions':
+                    return await this.testComprehensiveActions();
                 case 'state-comparison':
                     return await this.testStateComparison();
                 case 'feature-flags':
@@ -182,6 +184,86 @@ export class MigrationTestHarness {
     }
     
     /**
+     * Test comprehensive action mapping based on StateManager_Comparison_Analysis.md
+     */
+    private async testComprehensiveActions(): Promise<TestResult> {
+        this.outputChannel.appendLine('Testing comprehensive action mapping...');
+        
+        // Test all actions from the analysis document
+        const criticalActions = [
+            // Session actions marked with ✅
+            { type: 'session/messageAdded', payload: { role: 'user', content: 'test' } },
+            { type: 'session/messageUpdated', payload: { content: 'updated' } },
+            { type: 'session/messageCompleted', payload: {} },
+            { type: 'session/thinkingUpdated', payload: { content: 'thinking...', isActive: true } },
+            { type: 'session/toolUseAdded', payload: { toolName: 'test', toolId: 't1', input: {} } },
+            { type: 'session/toolResultAdded', payload: { toolId: 't1', result: 'success' } },
+            { type: 'session/tokenUsageUpdated', payload: { inputTokens: 10, outputTokens: 5 } },
+            
+            // Other session actions
+            { type: 'session/tokensUpdated', payload: { input: 10, output: 5 } },
+            { type: 'session/resumed', payload: { sessionId: 'test-123' } },
+            { type: 'session/cleared', payload: { sessionId: 'test-123' } },
+            { type: 'session/messageAppended', payload: { content: 'appended' } },
+            { type: 'session/modelSelected', payload: { model: 'claude-3' } },
+            
+            // UI actions
+            { type: 'ui/setReady', payload: { ready: true } },
+            { type: 'ui/showPermissionRequest', payload: { toolName: 'cmd', toolId: 't1', toolInput: {} } },
+            { type: 'ui/showError', payload: { message: 'error' } },
+            { type: 'ui/showNotification', payload: { message: 'notify' } },
+            { type: 'ui/showPlanProposal', payload: { plan: {} } },
+            
+            // Claude actions
+            { type: 'claude/setProcessing', payload: { processing: true } },
+            
+            // Other actions
+            { type: 'stream/messageReceived', payload: { chunk: {} } },
+            { type: 'config/initializeConfig', payload: { config: {} } },
+            { type: 'mcp/updateConnectedServers', payload: { servers: [] } }
+        ];
+        
+        const results = {
+            mapped: [] as string[],
+            customHandler: [] as string[],
+            unmapped: [] as string[],
+            failed: [] as string[]
+        };
+        
+        for (const action of criticalActions) {
+            const result = this.actionMapper.mapAction(action);
+            
+            if (result.success) {
+                results.mapped.push(action.type);
+                this.outputChannel.appendLine(`  ✅ ${action.type}: mapped to ${result.mappedAction?.type}`);
+            } else if (result.unmapped) {
+                results.unmapped.push(action.type);
+                this.outputChannel.appendLine(`  ⚠️  ${action.type}: unmapped`);
+            } else if (result.error === 'No handler produced action') {
+                results.customHandler.push(action.type);
+                this.outputChannel.appendLine(`  🔧 ${action.type}: needs custom handler`);
+            } else {
+                results.failed.push(action.type);
+                this.outputChannel.appendLine(`  ❌ ${action.type}: failed - ${result.error}`);
+            }
+        }
+        
+        this.outputChannel.appendLine(`\nSummary:`);
+        this.outputChannel.appendLine(`  Mapped: ${results.mapped.length} actions`);
+        this.outputChannel.appendLine(`  Need custom handler: ${results.customHandler.length} actions`);
+        this.outputChannel.appendLine(`  Unmapped: ${results.unmapped.length} actions`);
+        this.outputChannel.appendLine(`  Failed: ${results.failed.length} actions`);
+        
+        const stats = this.actionMapper.getStatistics();
+        
+        return {
+            success: results.failed.length === 0,
+            message: `Tested ${criticalActions.length} actions: ${results.mapped.length} mapped, ${results.customHandler.length} need handlers, ${results.unmapped.length} unmapped`,
+            details: { results, stats }
+        };
+    }
+    
+    /**
      * Test performance impact
      */
     private async testPerformance(): Promise<TestResult> {
@@ -264,7 +346,8 @@ export class MigrationTestHarness {
         context.subscriptions.push(
             vscode.commands.registerCommand('claude-code-chat.migration.testScenario', async () => {
                 const scenarios = [
-                    { label: 'Action Mapping', value: 'action-mapping' },
+                    { label: 'Action Mapping (Basic)', value: 'action-mapping' },
+                    { label: 'Comprehensive Actions Test', value: 'comprehensive-actions' },
                     { label: 'State Comparison', value: 'state-comparison' },
                     { label: 'Feature Flags', value: 'feature-flags' },
                     { label: 'Performance', value: 'performance' }
