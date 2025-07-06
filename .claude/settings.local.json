@@ -30,8 +30,7 @@
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "time",
-    "exa"
+    "time"
   ],
   "disabledMcpjsonServers": [
     "exa"

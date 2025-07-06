@@ -75,6 +75,10 @@ module.exports = {
                     globOptions: {
                         ignore: ['**/*.ts']
                     }
+                },
+                {
+                    from: 'src/test/abort-test-utils.js',
+                    to: 'test/abort-test-utils.js'
                 }
             ]
         }),

@@ -5,8 +5,23 @@
 	"tasks": [
 		{
 			"type": "npm",
-			"script": "watch",
-			"problemMatcher": "$tsc-watch",
+			"script": "watch:extension",
+			"problemMatcher": [
+				{
+					"pattern": {
+						"regexp": "\\[tsl\\] ERROR in (.*?)\\((\\d+),(\\d+)\\)\\s*:\\s*(.*)$",
+						"file": 1,
+						"line": 2,
+						"column": 3,
+						"message": 4
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": "webpack is watching",
+						"endsPattern": "webpack.*compiled"
+					}
+				}
+			],
 			"isBackground": true,
 			"presentation": {
 				"reveal": "never"
@@ -14,7 +29,8 @@
 			"group": {
 				"kind": "build",
 				"isDefault": true
-			}
+			},
+			"label": "npm: watch:extension"
 		}
 	]
 }

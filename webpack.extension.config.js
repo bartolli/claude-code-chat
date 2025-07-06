@@ -3,7 +3,7 @@ const CopyPlugin = require('copy-webpack-plugin');
 
 module.exports = {
     target: 'node', // VS Code extensions run in a Node.js context
-    mode: 'production',
+    mode: process.env.NODE_ENV === 'development' ? 'development' : 'production',
     
     entry: {
         extension: './src/extension.ts'
@@ -67,7 +67,11 @@ module.exports = {
                     globOptions: {
                         ignore: ['**/*.ts'] // Only copy JS files
                     }
-                }
+                },
+                ...(process.env.NODE_ENV === 'development' ? [{
+                    from: 'src/test/abort-test-utils.js',
+                    to: 'test/abort-test-utils.js'
+                }] : [])
             ]
         })
     ]

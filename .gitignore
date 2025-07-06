@@ -5,4 +5,26 @@ node_modules
 *.vsix
 backup
 .claude-trace/
+
+# Reference code from other projects (not part of this codebase)
 gui/
+
+# Test files in root
+test-*.js
+test-*.html
+test_markdown/
+
+# Log files
+*.log
+output.log
+
+# Debug files
+claude_commands_debug.bash
+mock-claude-process.js
+
+# Documentation that might be temporary
+example_stream_*.md
+thinking_*.md
+*_ANALYSIS.md
+*_analysis.md
+*_implementation.md

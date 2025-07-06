@@ -10,6 +10,22 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--log=off"
+			],
+			"outFiles": [
+				"${workspaceFolder}/out/**/*.js"
+			],
+			"preLaunchTask": "${defaultBuildTask}",
+			"env": {
+				"VSCODE_LOG_LEVEL": "off"
+			}
+		},
+		{
+			"name": "Run Extension (Verbose)",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
 			"outFiles": [

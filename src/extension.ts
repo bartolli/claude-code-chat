@@ -3,6 +3,7 @@ import * as cp from 'child_process';
 import * as util from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
+import { DebugConsole } from './utils/debug-console';
 
 const exec = util.promisify(cp.exec);
 
@@ -12,6 +13,14 @@ export function activate(context: vscode.ExtensionContext) {
     // Create output channel for debugging
     const outputChannel = vscode.window.createOutputChannel('Claude Code GUI');
     outputChannel.appendLine('[Activation] Claude Code GUI extension is being activated...');
+    
+    // Initialize debug console filtering in development mode
+    if (context.extensionMode === vscode.ExtensionMode.Development) {
+        const { Logger } = require('./core/Logger');
+        const logger = Logger.getInstance(outputChannel);
+        DebugConsole.initialize(logger, true);
+        console.log('STEP3: Debug console filtering enabled');
+    }
     
     try {
         // Try to load ServiceContainer with error handling
@@ -77,7 +86,7 @@ export function activate(context: vscode.ExtensionContext) {
             (global as any).serviceContainer = services;
             
             try {
-                require('./debug-utils/abort-test-utils');
+                require('./test/abort-test-utils');
                 console.log('STEP3: Test utilities loaded! Use abortTest.* in Debug Console');
                 outputChannel.appendLine('[Activation] Test utilities loaded! Use abortTest.* in Debug Console');
             } catch (error) {
