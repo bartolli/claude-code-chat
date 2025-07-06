@@ -140,7 +140,12 @@ export class MigrationTestHarness {
         return {
             success: true,
             message: `State comparison completed with ${result.discrepancies.length} discrepancies`,
-            details: result
+            details: {
+                isValid: result.isValid,
+                discrepancyCount: result.discrepancies.length,
+                discrepancies: result.discrepancies,
+                timestamp: result.timestamp
+            }
         };
     }
     

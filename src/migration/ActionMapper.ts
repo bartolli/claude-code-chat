@@ -20,7 +20,7 @@ import {
 import {
     setProcessing
 } from '../state/slices/claudeSlice';
-import { AnyAction } from '@reduxjs/toolkit';
+import { AnyAction, ActionCreator } from '@reduxjs/toolkit';
 
 /**
  * Webview action structure
@@ -40,7 +40,7 @@ export type CustomHandler = (action: WebviewAction) => AnyAction | null;
  */
 export interface ActionMappingConfig {
     webviewAction: string;
-    reduxActionCreator?: (...args: unknown[]) => AnyAction;
+    reduxActionCreator?: ActionCreator<AnyAction>;
     customHandler?: CustomHandler;
     payloadTransform?: (payload: unknown) => unknown;
 }
@@ -87,7 +87,10 @@ export class ActionMapper {
         // Direct Redux action mappings
         this.addMapping('session/messageAdded', { reduxActionCreator: messageAdded });
         this.addMapping('session/messageUpdated', { reduxActionCreator: messageUpdated });
-        this.addMapping('session/messageCompleted', { reduxActionCreator: messageCompleted });
+        this.addMapping('session/messageCompleted', { 
+            reduxActionCreator: messageCompleted,
+            payloadTransform: () => undefined // messageCompleted takes no payload
+        });
         this.addMapping('session/thinkingUpdated', { reduxActionCreator: thinkingUpdated });
         this.addMapping('session/toolUseAdded', { reduxActionCreator: toolUseAdded });
         this.addMapping('session/toolResultAdded', { reduxActionCreator: toolResultAdded });
@@ -116,7 +119,14 @@ export class ActionMapper {
             }
         });
         
-        this.addMapping('session/cleared', { reduxActionCreator: clearSession });
+        this.addMapping('session/cleared', { 
+            reduxActionCreator: clearSession,
+            payloadTransform: (payload) => {
+                // If payload has sessionId, use it; otherwise use current session
+                const clearedPayload = payload as { sessionId?: string };
+                return clearedPayload.sessionId || '';
+            }
+        });
         
         this.addMapping('ui/setReady', { 
             reduxActionCreator: setWebviewReady,
@@ -183,7 +193,7 @@ export class ActionMapper {
                     : action.payload;
                 
                 // Create Redux action
-                mappedAction = mapping.reduxActionCreator(payload);
+                mappedAction = mapping.reduxActionCreator(payload) as AnyAction;
             } else if (mapping.customHandler) {
                 // Use custom handler
                 mappedAction = mapping.customHandler(action);
@@ -221,7 +231,7 @@ export class ActionMapper {
     /**
      * Custom handler for message append
      */
-    private handleMessageAppended(action: WebviewAction): AnyAction | null {
+    private handleMessageAppended(_action: WebviewAction): AnyAction | null {
         // This would need to be handled differently as it's appending to existing message
         // For now, return null to indicate it needs special handling
         return null;
@@ -230,7 +240,7 @@ export class ActionMapper {
     /**
      * Custom handler for model selection
      */
-    private handleModelSelected(action: WebviewAction): AnyAction | null {
+    private handleModelSelected(_action: WebviewAction): AnyAction | null {
         // Model selection affects config, not session state
         // This would dispatch to config slice
         return null;
@@ -239,7 +249,7 @@ export class ActionMapper {
     /**
      * Custom handler for error display
      */
-    private handleShowError(action: WebviewAction): AnyAction | null {
+    private handleShowError(_action: WebviewAction): AnyAction | null {
         // Errors might need special UI handling
         return null;
     }
@@ -247,7 +257,7 @@ export class ActionMapper {
     /**
      * Custom handler for notifications
      */
-    private handleShowNotification(action: WebviewAction): AnyAction | null {
+    private handleShowNotification(_action: WebviewAction): AnyAction | null {
         // Notifications might bypass Redux entirely
         return null;
     }
@@ -255,7 +265,7 @@ export class ActionMapper {
     /**
      * Custom handler for stream messages
      */
-    private handleStreamMessage(action: WebviewAction): AnyAction | null {
+    private handleStreamMessage(_action: WebviewAction): AnyAction | null {
         // Stream messages need complex processing
         return null;
     }

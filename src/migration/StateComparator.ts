@@ -77,7 +77,7 @@ export class StateComparator {
      * Compare session-related state
      */
     private compareSessionData(
-        simpleState: any,
+        _simpleState: any,
         reduxState: RootState,
         discrepancies: StateDiscrepancy[],
         validatedPaths: string[]
@@ -87,7 +87,7 @@ export class StateComparator {
         validatedPaths.push(path);
         
         const simpleSessionId = this.simpleStateManager.getCurrentSessionId();
-        const reduxSessionId = reduxState.sessions.currentSessionId;
+        const reduxSessionId = reduxState.session.currentSessionId;
         
         if (simpleSessionId !== reduxSessionId) {
             discrepancies.push({
@@ -104,7 +104,7 @@ export class StateComparator {
         validatedPaths.push(sessionsPath);
         
         // Compare session counts (SimpleStateManager doesn't store full sessions)
-        const reduxSessionCount = Object.keys(reduxState.sessions.sessions).length;
+        const reduxSessionCount = Object.keys(reduxState.session.sessions).length;
         if (simpleSessionId && reduxSessionCount === 0) {
             discrepancies.push({
                 path: 'sessions.count',
@@ -120,7 +120,7 @@ export class StateComparator {
      * Compare UI state
      */
     private compareUIState(
-        simpleState: any,
+        _simpleState: any,
         reduxState: RootState,
         discrepancies: StateDiscrepancy[],
         validatedPaths: string[]
@@ -130,7 +130,7 @@ export class StateComparator {
         validatedPaths.push(readyPath);
         
         const simpleReady = this.simpleStateManager.isWebviewReady();
-        const reduxReady = reduxState.ui.webviewReady;
+        const reduxReady = reduxState.ui.isWebviewReady;
         
         if (simpleReady !== reduxReady) {
             discrepancies.push({
@@ -146,7 +146,7 @@ export class StateComparator {
         const runningPath = 'ui.claudeRunning';
         validatedPaths.push(runningPath);
         
-        const reduxRunning = reduxState.ui.claudeRunning;
+        const reduxRunning = reduxState.ui.isClaudeRunning;
         // SimpleStateManager doesn't track this, so we only validate if Redux has it set
         if (reduxRunning === true) {
             discrepancies.push({
@@ -163,7 +163,7 @@ export class StateComparator {
      * Compare configuration state
      */
     private compareConfiguration(
-        simpleState: any,
+        _simpleState: any,
         reduxState: RootState,
         discrepancies: StateDiscrepancy[],
         validatedPaths: string[]
@@ -219,9 +219,9 @@ export class StateComparator {
             reduxState: this.sanitizeState(reduxState),
             metadata: {
                 simpleSessionId: this.simpleStateManager.getCurrentSessionId(),
-                reduxSessionId: reduxState.sessions.currentSessionId,
+                reduxSessionId: reduxState.session.currentSessionId || null,
                 simpleWebviewReady: this.simpleStateManager.isWebviewReady(),
-                reduxWebviewReady: reduxState.ui.webviewReady
+                reduxWebviewReady: reduxState.ui.isWebviewReady
             }
         };
     }
@@ -408,7 +408,7 @@ export const ValidationChecks = {
         };
     },
     
-    webviewReady: (before: StateSnapshot, after: StateSnapshot) => {
+    webviewReady: (_before: StateSnapshot, after: StateSnapshot) => {
         return {
             valid: after.metadata.simpleWebviewReady === after.metadata.reduxWebviewReady,
             message: `Webview ready states don't match`
