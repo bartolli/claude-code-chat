@@ -133,8 +133,8 @@ export const StepContainer: React.FC<StepContainerProps> = ({
                             />
                         )}
                         
-                        {/* Show tool uses after thinking but before content */}
-                        {toolUses && toolUses.length > 0 && (
+                        {/* Show tool uses first if no content yet */}
+                        {toolUses && toolUses.length > 0 && !content && (
                             <>
                                 {/* Filter out exit_plan_mode as it's handled separately in Chat component */}
                                 {(() => {
@@ -144,14 +144,23 @@ export const StepContainer: React.FC<StepContainerProps> = ({
                             </>
                         )}
                         
-                        {/* Show content last */}
+                        {/* Show assistant content/reasoning */}
                         <StyledMarkdownPreview
                             source={content}
                             isRenderingInStepContainer
                             itemIndex={index}
                         />
                         
-                        {/* Removed duplicate thinking indicator - handled above */}
+                        {/* Show tool uses after content if content exists */}
+                        {toolUses && toolUses.length > 0 && content && (
+                            <>
+                                {/* Filter out exit_plan_mode as it's handled separately in Chat component */}
+                                {(() => {
+                                    const otherTools = toolUses.filter(t => t.toolName !== 'exit_plan_mode');
+                                    return otherTools.length > 0 ? <InlineToolDisplay toolUses={otherTools} /> : null;
+                                })()}
+                            </>
+                        )}
                     </>
                 )}
             </ContentDiv>

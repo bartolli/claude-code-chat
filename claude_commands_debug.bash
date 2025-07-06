@@ -1,4 +1,4 @@
-claude -p "Plan a task and sub-tasks how to optimize the build process without over-engineer it. Focus on the top 3 optimizations. Nothing else." \
+claude -p "Think of if Natural_flow_implementation.md is working correctly" \
 --verbose \
 --output-format stream-json \
 --model sonnet \

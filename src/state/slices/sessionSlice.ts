@@ -139,8 +139,6 @@ const sessionSlice = createSlice({
       role: 'user' | 'assistant'; 
       content: string;
       messageId?: string;
-      segmentId?: string;
-      segmentType?: 'intro' | 'tool-preface' | 'tool-response' | 'continuation';
       parentMessageId?: string;
       isThinkingActive?: boolean;
     }>) => {
@@ -201,9 +199,6 @@ const sessionSlice = createSlice({
           content: action.payload.content,
           timestamp: Date.now(),
           messageId: action.payload.messageId,
-          segmentId: action.payload.segmentId,
-          segmentType: action.payload.segmentType,
-          parentMessageId: action.payload.parentMessageId,
           isThinkingActive: action.payload.isThinkingActive
         };
         
@@ -221,7 +216,6 @@ const sessionSlice = createSlice({
     messageUpdated: (state, action: PayloadAction<{ 
       role: 'assistant'; 
       content?: string;
-      segmentId?: string;
       isThinkingActive?: boolean;
       messageId?: string;
     }>) => {
@@ -247,25 +241,16 @@ const sessionSlice = createSlice({
       
       const session = state.sessions[state.currentSessionId];
       if (session) {
-        // If segmentId provided, find that specific segment
-        if (action.payload.segmentId) {
-          const segmentIndex = session.messages.findIndex(
-            msg => msg.segmentId === action.payload.segmentId
-          );
-          if (segmentIndex !== -1 && action.payload.content !== undefined) {
-            session.messages[segmentIndex].content = action.payload.content;
+        // Find the last assistant message
+        let lastAssistantIndex = -1;
+        for (let i = session.messages.length - 1; i >= 0; i--) {
+          if (session.messages[i].role === 'assistant') {
+            lastAssistantIndex = i;
+            break;
           }
-        } else {
-          // Legacy behavior: Find the last assistant message
-          let lastAssistantIndex = -1;
-          for (let i = session.messages.length - 1; i >= 0; i--) {
-            if (session.messages[i].role === 'assistant') {
-              lastAssistantIndex = i;
-              break;
-            }
-          }
-          
-          if (lastAssistantIndex !== -1) {
+        }
+        
+        if (lastAssistantIndex !== -1) {
             // Update existing assistant message
             const message = session.messages[lastAssistantIndex];
             let hasChanges = false;
@@ -294,15 +279,14 @@ const sessionSlice = createSlice({
             if (hasChanges) {
               session.updatedAt = Date.now();
             }
-          } else {
-            // No assistant message yet, create one
-            const message: ClaudeMessage = {
-              role: 'assistant',
-              content: action.payload.content || '',
-              timestamp: Date.now()
-            };
-            session.messages.push(message);
-          }
+        } else {
+          // No assistant message yet, create one
+          const message: ClaudeMessage = {
+            role: 'assistant',
+            content: action.payload.content || '',
+            timestamp: Date.now()
+          };
+          session.messages.push(message);
         }
         
         session.updatedAt = Date.now();
@@ -322,13 +306,14 @@ const sessionSlice = createSlice({
       }
     },
     
-    thinkingUpdated: (state, action: PayloadAction<{ content: string; currentLine?: string; isActive: boolean; duration?: number; messageId?: string | null }>) => {
+    thinkingUpdated: (state, action: PayloadAction<{ content: string; currentLine?: string; isActive: boolean; duration?: number; messageId?: string | null; isIncremental?: boolean }>) => {
       console.log('[sessionSlice] thinkingUpdated:', {
         content: action.payload.content?.substring(0, 50),
         currentLine: action.payload.currentLine,
         isActive: action.payload.isActive,
         duration: action.payload.duration,
-        messageId: action.payload.messageId
+        messageId: action.payload.messageId,
+        isIncremental: action.payload.isIncremental
       });
       if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
       
@@ -367,9 +352,15 @@ const sessionSlice = createSlice({
         }
       }
       if (targetIndex >= 0) {
-        // Update thinking content (backend already accumulates)
+        // Update thinking content
         if (action.payload.content !== undefined) {
-          messages[targetIndex].thinking = action.payload.content;
+          if (action.payload.isIncremental) {
+            // Append new content to existing thinking
+            messages[targetIndex].thinking = (messages[targetIndex].thinking || '') + action.payload.content;
+          } else {
+            // Replace entire thinking content
+            messages[targetIndex].thinking = action.payload.content;
+          }
         }
         if (action.payload.duration !== undefined) {
           messages[targetIndex].thinkingDuration = action.payload.duration;
@@ -442,7 +433,7 @@ const sessionSlice = createSlice({
       toolId: string;
       input: any;
       status: string;
-      segmentId?: string;
+      parentToolUseId?: string;
     }>) => {
       console.log('[sessionSlice] toolUseAdded:', action.payload);
       if (!state.currentSessionId || !state.sessions[state.currentSessionId]) return;
@@ -452,16 +443,11 @@ const sessionSlice = createSlice({
       
       let targetIndex = -1;
       
-      // If segmentId provided, find that specific segment
-      if (action.payload.segmentId) {
-        targetIndex = messages.findIndex(msg => msg.segmentId === action.payload.segmentId);
-      } else {
-        // Legacy: Find the last assistant message
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === 'assistant') {
-            targetIndex = i;
-            break;
-          }
+      // Find the last assistant message
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant') {
+          targetIndex = i;
+          break;
         }
       }
       
@@ -471,11 +457,12 @@ const sessionSlice = createSlice({
           message.toolUses = [];
         }
         
-        // Add the tool use
+        // Add the tool use with parent ID if available
         message.toolUses.push({
           toolName: action.payload.toolName,
           toolId: action.payload.toolId,
-          input: action.payload.input
+          input: action.payload.input,
+          parentToolUseId: action.payload.parentToolUseId
         });
         
         // Update activeSession to trigger re-render

@@ -57,10 +57,6 @@ export interface ClaudeMessage {
   content: string;
   timestamp?: number;
   messageId?: string; // Track Claude's message ID
-  // Segmentation support
-  segmentId?: string;
-  segmentType?: 'intro' | 'tool-preface' | 'tool-response' | 'continuation';
-  parentMessageId?: string; // Links segments from the same stream
   toolUses?: Array<{
     toolName: string;
     toolId: string;

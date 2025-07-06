@@ -56,13 +56,14 @@ const ToolName = styled.span`
   font-weight: 500;
 `;
 
-const StatusIcon = styled.div<{ status: 'calling' | 'complete' | 'error' }>`
+const StatusIcon = styled.div<{ status: 'calling' | 'complete' | 'error' | 'timeout' }>`
   width: 18px;
   height: 18px;
   margin-left: 8px;
   color: ${props => 
     props.status === 'complete' ? 'var(--vscode-testing-iconPassed)' :
     props.status === 'error' ? 'var(--vscode-testing-iconFailed)' :
+    props.status === 'timeout' ? 'var(--vscode-descriptionForeground)' :
     'var(--vscode-progressBar-background)'
   };
 `;
@@ -89,8 +90,9 @@ const ToolResult = styled.div<{ isError?: boolean }>`
   padding: 12px 16px;
   font-size: 12px;
   font-family: var(--vscode-editor-font-family);
-  color: ${props => props.isError ? 'var(--vscode-errorForeground)' : vscForeground};
-  background-color: ${props => props.isError ? 'var(--vscode-inputValidation-errorBackground)' : 'transparent'};
+  color: ${props => props.isError ? vscForeground : vscForeground};
+  background-color: ${props => props.isError ? 'rgba(255, 0, 0, 0.1)' : 'transparent'};
+  border: ${props => props.isError ? '1px solid var(--vscode-errorForeground)' : 'none'};
   max-height: 200px;
   overflow-y: auto;
   
@@ -122,7 +124,7 @@ interface ToolUseDisplayProps {
   toolId?: string;
   input?: any;
   result?: string;
-  status: 'calling' | 'complete' | 'error';
+  status: 'calling' | 'complete' | 'error' | 'timeout';
   isError?: boolean;
   defaultExpanded?: boolean;
 }
@@ -136,10 +138,11 @@ const getToolIcon = (toolName: string) => {
   return <DocumentTextIcon />;
 };
 
-const getStatusIcon = (status: 'calling' | 'complete' | 'error') => {
+const getStatusIcon = (status: 'calling' | 'complete' | 'error' | 'timeout') => {
   switch (status) {
     case 'complete': return <CheckCircleIcon />;
     case 'error': return <XCircleIcon />;
+    case 'timeout': return <XCircleIcon />;
     case 'calling': return <ArrowPathIcon className="animate-spin" />;
   }
 };

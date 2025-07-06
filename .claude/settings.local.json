@@ -23,7 +23,8 @@
       "Bash(make:*)",
       "Bash(jq:*)",
       "Bash(cp:*)",
-      "WebFetch(domain:docs.anthropic.com)"
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   },

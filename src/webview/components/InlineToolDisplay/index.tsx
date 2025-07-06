@@ -2,22 +2,18 @@ import React from 'react';
 import styled from 'styled-components';
 import { ToolChainContainer } from './ToolChainContainer';
 
+interface ToolUse {
+  toolName: string;
+  toolId: string;
+  input: unknown;
+  result?: string;
+  isError?: boolean;
+  parentToolUseId?: string;
+}
+
 interface ToolChain {
-  rootTool: {
-    toolName: string;
-    toolId: string;
-    input: any;
-    result?: string;
-    isError?: boolean;
-  };
-  tools: Array<{
-    toolName: string;
-    toolId: string;
-    input: any;
-    result?: string;
-    isError?: boolean;
-    parentToolUseId?: string;
-  }>;
+  rootTool: ToolUse;
+  tools: ToolUse[];
   totalTools: number;
 }
 
@@ -29,14 +25,7 @@ const ToolsSection = styled.div`
 `;
 
 interface InlineToolDisplayProps {
-  toolUses: Array<{
-    toolName: string;
-    toolId: string;
-    input: any;
-    result?: string;
-    isError?: boolean;
-    parentToolUseId?: string;
-  }>;
+  toolUses: ToolUse[];
 }
 
 export const InlineToolDisplay: React.FC<InlineToolDisplayProps> = ({ toolUses }) => {
@@ -46,10 +35,11 @@ export const InlineToolDisplay: React.FC<InlineToolDisplayProps> = ({ toolUses }
     
     // Build chains from tool uses
     const chains: ToolChain[] = [];
+    const chainMap = new Map<string, ToolChain>(); // Map tool IDs to their chains
     const toolMap = new Map(toolUses.map(tool => [tool.toolId, tool]));
     const processedIds = new Set<string>();
     
-    // Find root tools (no parent) and build chains from them
+    // First pass: Create chains for root tools and map all tools to their chains
     toolUses.forEach(tool => {
       if (!tool.parentToolUseId && !processedIds.has(tool.toolId)) {
         const chain: ToolChain = {
@@ -58,32 +48,50 @@ export const InlineToolDisplay: React.FC<InlineToolDisplayProps> = ({ toolUses }
           totalTools: 1
         };
         
-        // Find all children recursively
-        const findChildren = (parentId: string) => {
-          toolUses.forEach(childTool => {
-            if (childTool.parentToolUseId === parentId && !processedIds.has(childTool.toolId)) {
-              chain.tools.push(childTool);
-              chain.totalTools++;
-              processedIds.add(childTool.toolId);
-              findChildren(childTool.toolId);
-            }
-          });
-        };
-        
         processedIds.add(tool.toolId);
-        findChildren(tool.toolId);
+        chainMap.set(tool.toolId, chain);
         chains.push(chain);
+      }
+    });
+    
+    // Second pass: Add child tools to existing chains
+    toolUses.forEach(tool => {
+      if (tool.parentToolUseId && !processedIds.has(tool.toolId)) {
+        // Find the chain that contains the parent
+        let parentChain: ToolChain | undefined;
+        
+        // Check if parent is a root tool
+        parentChain = chainMap.get(tool.parentToolUseId);
+        
+        // If not found, search through all chains
+        if (!parentChain) {
+          for (const chain of chains) {
+            if (chain.tools.some(t => t.toolId === tool.parentToolUseId)) {
+              parentChain = chain;
+              break;
+            }
+          }
+        }
+        
+        if (parentChain) {
+          parentChain.tools.push(tool);
+          parentChain.totalTools++;
+          processedIds.add(tool.toolId);
+          chainMap.set(tool.toolId, parentChain);
+        }
       }
     });
     
     // Handle any orphaned tools as single-tool chains
     toolUses.forEach(tool => {
       if (!processedIds.has(tool.toolId)) {
-        chains.push({
+        const chain: ToolChain = {
           rootTool: tool,
           tools: [tool],
           totalTools: 1
-        });
+        };
+        chains.push(chain);
+        chainMap.set(tool.toolId, chain);
       }
     });
     
@@ -98,7 +106,7 @@ export const InlineToolDisplay: React.FC<InlineToolDisplayProps> = ({ toolUses }
     <ToolsSection>
       {toolChains.map((chain, index) => (
         <ToolChainContainer 
-          key={chain.rootTool.toolId} 
+          key={`chain-${chain.rootTool.toolId}`} 
           chain={chain}
           isLast={index === toolChains.length - 1}
         />

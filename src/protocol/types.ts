@@ -205,6 +205,7 @@ export interface ToWebviewProtocol {
         toolId: string;
         input: any;
         status: string;
+        parentToolUseId?: string;
     }];
     'message/toolResult': [void, {
         toolId: string;

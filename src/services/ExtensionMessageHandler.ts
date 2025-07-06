@@ -12,7 +12,6 @@ import { ClaudeStreamMessage, ModelType } from '../types/claude';
 import { Readable } from 'stream';
 import { mcpService } from './McpService';
 import { mcpClientService } from './McpClientService';
-import { MessageSegmenter } from './MessageSegmenter';
 import { ClaudeProcessManager } from './ClaudeProcessManager';
 import { ServiceContainer as NewServiceContainer } from './ServiceContainer';
 import { ClaudeProcessAdapter } from '../types/process-adapter';
@@ -26,7 +25,6 @@ export class ExtensionMessageHandler {
     private webviewProtocol: SimpleWebviewProtocol | null = null;
     private streamProcessor: StreamProcessor;
     private jsonParser: ChunkedJSONParser;
-    private messageSegmenter: MessageSegmenter;
     private currentSessionId: string | null = null;
     private currentClaudeProcess: ClaudeProcessAdapter | null = null;
     private pendingPermissionResponses: Map<string, (response: string) => void> = new Map();
@@ -39,6 +37,9 @@ export class ExtensionMessageHandler {
     private hasCreatedAssistantMessage: boolean = false;
     private thinkingMessageId: string | null = null;
     private currentAssistantMessageId: string | null = null;
+    private isFirstTextBlock: boolean = true; // Track first text block for natural flow
+    private hasSeenToolUse: boolean = false; // Track if we've seen a tool use to create new messages
+    private pendingToolIds: Set<string> = new Set(); // Track tools that haven't received results
     private processManager: ClaudeProcessManager;
     private currentAbortController: AbortController | null = null; // TODO: Test controller reference is maintained
 
@@ -50,7 +51,6 @@ export class ExtensionMessageHandler {
         this.streamProcessor = serviceContainer.get('StreamProcessor') as StreamProcessor;
         this.jsonParser = serviceContainer.get('ChunkedJSONParser') as ChunkedJSONParser;
         this.processManager = serviceContainer.get('ClaudeProcessManager') as ClaudeProcessManager;
-        this.messageSegmenter = new MessageSegmenter();
         
         // Get or create output channel
         try {
@@ -236,6 +236,8 @@ export class ExtensionMessageHandler {
                 // This prevents the double processing indicator
                 this.hasCreatedAssistantMessage = false;
                 this.currentAssistantMessageId = null;
+                this.isFirstTextBlock = true; // Reset for new message
+                this.hasSeenToolUse = false; // Reset tool tracking
                 this.outputChannel.appendLine(`[DEBUG] Waiting for content before creating assistant message`);
                 
                 // Reset message creation flag for new message
@@ -619,9 +621,8 @@ export class ExtensionMessageHandler {
             let totalCost: number = 0;
             let apiKeySource: string | undefined;
             
-            // Reset message segmenter for new stream
+            // Initialize stream tracking
             const streamId = `stream_${Date.now()}`;
-            this.messageSegmenter.reset(streamId);
             
             // Set encoding for stdout
             claudeProcess.stdout?.setEncoding('utf8');
@@ -649,34 +650,10 @@ export class ExtensionMessageHandler {
                                 // Process the JSON message
                                 const streamingState = { isStreaming };
                                 this.processClaudeStreamMessage(json, (content) => {
-                                    // Process content through segmenter
-                                    const segment = this.messageSegmenter.processTextChunk(content);
-                                    
-                                    // Always accumulate content and update the single assistant message
-                                    if (this.webviewProtocol && this.hasCreatedAssistantMessage) {
-                                        // Get all accumulated content from all segments plus current
-                                        const allSegments = this.messageSegmenter.getSegments();
-                                        const currentSegment = this.messageSegmenter.state?.currentSegment;
-                                        
-                                        let totalContent = '';
-                                        // Add content from completed segments
-                                        for (const seg of allSegments) {
-                                            totalContent += seg.content;
-                                        }
-                                        // Add content from current segment if any
-                                        if (currentSegment && currentSegment.content) {
-                                            totalContent += currentSegment.content;
-                                        }
-                                        
-                                        // Update the message with accumulated content
-                                        this.webviewProtocol.post('message/update', {
-                                            role: 'assistant',
-                                            content: totalContent
-                                        });
+                                    // Store content for processing
+                                    if (content.trim()) {
+                                        assistantContent += content;
                                     }
-                                    
-                                    // Keep track of all content for backwards compatibility
-                                    assistantContent += content;
                                 }, (metadata) => {
                                     if (metadata.sessionId) processSessionId = metadata.sessionId;
                                     if (metadata.messageId) messageId = metadata.messageId;
@@ -703,20 +680,8 @@ export class ExtensionMessageHandler {
                         }
                     }
                     
-                    // Finalize any remaining segments
-                    const finalSegments = this.messageSegmenter.finalize();
-                    this.outputChannel.appendLine(`[DEBUG] Stream finalized with ${finalSegments.length} total segments`);
-                    
-                    // Send final content update if we have accumulated content
-                    if (finalSegments.length > 0 && this.webviewProtocol) {
-                        const finalContent = finalSegments.map(seg => seg.content).join('');
-                        if (finalContent) {
-                            this.webviewProtocol.post('message/update', {
-                                role: 'assistant',
-                                content: finalContent
-                            });
-                        }
-                    }
+                    // Stream ended - natural flow completed
+                    this.outputChannel.appendLine(`[DEBUG] Stream ended - first text block updated thinking, subsequent blocks created new messages`);
                 });
                 
                 claudeProcess.stdout.on('error', (error) => {
@@ -781,29 +746,27 @@ export class ExtensionMessageHandler {
                         this.outputChannel.appendLine(`[WARNING] No data was received from Claude`);
                     }
                 }
+                
+                // Mark any pending tools as timed out or incomplete
+                if (this.pendingToolIds.size > 0) {
+                    this.outputChannel.appendLine(`[Process Exit] ${this.pendingToolIds.size} tools did not receive results`);
+                    this.outputChannel.appendLine(`[Process Exit] Pending tool IDs: ${Array.from(this.pendingToolIds).join(', ')}`);
+                    for (const toolId of this.pendingToolIds) {
+                        this.outputChannel.appendLine(`[Process Exit] Sending timeout for tool: ${toolId}`);
+                        // Send a timeout/no-response status for tools that didn't receive results
+                        this.webviewProtocol?.post('message/toolResult', {
+                            toolId: toolId,
+                            result: '(No response received)',
+                            isError: true,
+                            status: 'timeout'
+                        });
+                    }
+                    this.pendingToolIds.clear();
+                    this.outputChannel.appendLine(`[Process Exit] Cleared all pending tools`);
+                }
+                
                 // Always send completion message and set processing to false
                 this.webviewProtocol?.post('chat/messageComplete', {});
-                
-                // Get final content from all segments
-                const finalContent = this.messageSegmenter.state?.segments
-                    .map(seg => seg.content)
-                    .join('') || assistantContent || '';
-                
-                // Ensure we have an assistant message
-                if (!this.hasCreatedAssistantMessage && finalContent) {
-                    this.webviewProtocol?.post('message/add', {
-                        role: 'assistant',
-                        content: finalContent,
-                        isThinkingActive: false
-                    });
-                } else if (this.hasCreatedAssistantMessage) {
-                    // Update with final content and clear thinking state
-                    this.webviewProtocol?.post('message/update', {
-                        role: 'assistant',
-                        content: finalContent,
-                        isThinkingActive: false
-                    });
-                }
                 
                 this.webviewProtocol?.post('status/processing', false);
                 this.outputChannel.appendLine(`[DEBUG] Set processing status to false`);
@@ -812,6 +775,8 @@ export class ExtensionMessageHandler {
                 this.hasCreatedAssistantMessage = false;
                 this.currentAssistantMessageId = null;
                 this.thinkingMessageId = null;
+                this.isFirstTextBlock = true; // Reset for next message
+                this.hasSeenToolUse = false; // Reset tool tracking
                 
                 // Clean up process references
                 this.currentClaudeProcess = null;
@@ -909,23 +874,10 @@ export class ExtensionMessageHandler {
                         apiKeySource: json.apiKeySource
                     });
                     
-                    // Create initial assistant message but track it properly
+                    // Mark streaming as started but don't create initial message
                     if (!streamingState.isStreaming) {
                         streamingState.isStreaming = true;
-                        this.messageSegmenter.reset(`stream_${Date.now()}`);
-                        
-                        // Create the assistant message once here with messageId if available
-                        if (!this.hasCreatedAssistantMessage && this.webviewProtocol) {
-                            this.webviewProtocol.post('message/add', {
-                                role: 'assistant',
-                                content: '',
-                                messageId: json.message?.id,
-                                isThinkingActive: true
-                            });
-                            this.hasCreatedAssistantMessage = true;
-                            this.currentAssistantMessageId = json.message?.id || null;
-                            this.outputChannel.appendLine(`[DEBUG] Created initial assistant message in system case with messageId: ${json.message?.id}`);
-                        }
+                        this.outputChannel.appendLine(`[DEBUG] Streaming started - waiting for content blocks to create messages`);
                     }
                 }
                 break;
@@ -1033,15 +985,47 @@ export class ExtensionMessageHandler {
                                     });
                                 }
                                 
-                                this.outputChannel.appendLine(`[DEBUG] Calling onContent callback with text`);
-                                onContent(block.text);
+                                // Each text block creates a new message for natural conversation flow
+                                if (this.webviewProtocol) {
+                                    const newMessageId = json.message?.id ? `${json.message.id}_${Date.now()}` : `msg_${Date.now()}`;
+                                    this.webviewProtocol.post('message/add', {
+                                        role: 'assistant',
+                                        content: block.text,
+                                        messageId: newMessageId
+                                    });
+                                    
+                                    this.outputChannel.appendLine(`[DEBUG] Created new assistant message: ${newMessageId}`);
+                                    
+                                    // Don't track message ID - each message is independent
+                                    this.hasCreatedAssistantMessage = true;
+                                }
+                                
+                                // Don't call onContent - we're handling it directly
+                                onContent('');
                             } else if (block.type === 'thinking' && block.thinking) {
                                 this.outputChannel.appendLine(`[JSON] Thinking content: ${block.thinking.substring(0, 50)}...`);
                                 
-                                // Store message ID on first thinking
-                                if (!this.thinkingMessageId && json.message?.id) {
-                                    this.thinkingMessageId = json.message.id;
-                                    this.outputChannel.appendLine(`[DEBUG] Stored thinking messageId: ${this.thinkingMessageId}`);
+                                // Create a message if we haven't already
+                                if (!this.hasCreatedAssistantMessage || !this.currentAssistantMessageId) {
+                                    // Use the message ID from the stream or generate one
+                                    const messageId = json.message?.id || `msg_${Date.now()}`;
+                                    this.currentAssistantMessageId = messageId;
+                                    this.thinkingMessageId = messageId; // Use same ID for thinking tracking
+                                    
+                                    // Create the message with thinking
+                                    if (this.webviewProtocol) {
+                                        this.webviewProtocol.post('message/add', {
+                                            role: 'assistant',
+                                            content: '',
+                                            messageId: messageId,
+                                            isThinkingActive: true
+                                        });
+                                        this.hasCreatedAssistantMessage = true;
+                                        this.outputChannel.appendLine(`[DEBUG] Created assistant message with thinking: ${messageId}`);
+                                    }
+                                } else {
+                                    // Use existing message for thinking
+                                    this.thinkingMessageId = this.currentAssistantMessageId;
                                 }
                                 
                                 // Track thinking start time
@@ -1050,21 +1034,25 @@ export class ExtensionMessageHandler {
                                     this.outputChannel.appendLine(`[DEBUG] Thinking started at: ${this.thinkingStartTime}`);
                                 }
                                 
-                                // Accumulate thinking content
-                                this.accumulatedThinking += block.thinking;
+                                // Store the new thinking chunk
+                                const newThinkingContent = block.thinking;
+                                
+                                // Accumulate thinking content (for internal tracking)
+                                this.accumulatedThinking += newThinkingContent;
                                 
                                 // Extract last line for header display
                                 const lines = this.accumulatedThinking.split('\n');
                                 this.latestThinkingLine = lines[lines.length - 1] || lines[lines.length - 2] || '';
                                 
-                                // Send thinking update to UI
+                                // Send thinking update to UI with only the new content
                                 this.outputChannel.appendLine(`[DEBUG] webviewProtocol status: ${this.webviewProtocol ? 'available' : 'not available'}`);
                                 if (this.webviewProtocol) {
-                                    this.outputChannel.appendLine(`[DEBUG] Sending thinking update to UI with messageId: ${this.thinkingMessageId}`);
+                                    this.outputChannel.appendLine(`[DEBUG] Sending incremental thinking update to UI with messageId: ${this.thinkingMessageId}`);
                                     this.webviewProtocol.post('message/thinking', {
-                                        content: this.accumulatedThinking,
+                                        content: newThinkingContent,  // Send only new content
                                         currentLine: this.latestThinkingLine,
                                         isActive: true,
+                                        isIncremental: true,  // Flag to indicate this is incremental
                                         messageId: this.thinkingMessageId
                                     });
                                 } else {
@@ -1072,21 +1060,36 @@ export class ExtensionMessageHandler {
                                 }
                             } else if (block.type === 'tool_use') {
                                 this.outputChannel.appendLine(`[JSON] Tool use: ${block.name} with id: ${block.id}`);
+                                this.outputChannel.appendLine(`[JSON] Tool input: ${JSON.stringify(block.input, null, 2)}`);
                                 
-                                // Process tool use through segmenter
-                                this.messageSegmenter.processToolUse({
-                                    toolName: block.name,
-                                    toolId: block.id,
-                                    input: block.input
-                                });
+                                // Mark that we've seen a tool use
+                                this.hasSeenToolUse = true;
                                 
-                                // Send tool use update to UI - attach to the assistant message
+                                // Track this tool as pending
+                                this.pendingToolIds.add(block.id);
+                                this.outputChannel.appendLine(`[JSON] Added ${block.id} to pending tools. Total pending: ${this.pendingToolIds.size}`);
+                                
+                                // Tools attach to the current conversation flow
+                                // If no message exists yet, create one for the tools
+                                if (!this.hasCreatedAssistantMessage) {
+                                    const messageId = `tools_${Date.now()}`;
+                                    this.webviewProtocol?.post('message/add', {
+                                        role: 'assistant',
+                                        content: '', // Empty content - tools will show
+                                        messageId: messageId
+                                    });
+                                    this.hasCreatedAssistantMessage = true;
+                                    this.outputChannel.appendLine(`[DEBUG] Created message for tools: ${messageId}`);
+                                }
+                                
+                                // Send tool use to attach to the most recent message
+                                this.outputChannel.appendLine(`[JSON] Sending tool use to UI: ${block.name} (${block.id}) with status: calling`);
                                 this.webviewProtocol?.post('message/toolUse', {
                                     toolName: block.name,
                                     toolId: block.id,
                                     input: block.input,
-                                    status: 'calling'
-                                    // Don't send segmentId - let it attach to the last assistant message
+                                    status: 'calling',
+                                    parentToolUseId: json.parent_tool_use_id || undefined
                                 });
                             }
                         }
@@ -1117,7 +1120,21 @@ export class ExtensionMessageHandler {
                             }
                         }
                         
-                        onContent(json.message.content);
+                        // Handle string content as a single text block - same pattern as array blocks
+                        if (this.webviewProtocol) {
+                            // Always create a new message for each text block
+                            const newMessageId = `${json.message?.id || 'msg'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                            this.webviewProtocol.post('message/add', {
+                                role: 'assistant',
+                                content: json.message.content,
+                                messageId: newMessageId
+                            });
+                            
+                            // Track that we've created messages
+                            this.hasCreatedAssistantMessage = true;
+                            this.currentAssistantMessageId = newMessageId;
+                        }
+                        onContent('');
                     }
                 }
                 if (json.message?.id) {
@@ -1146,11 +1163,17 @@ export class ExtensionMessageHandler {
                     for (const block of json.message.content) {
                         if (block.type === 'tool_result' && block.tool_use_id) {
                             this.outputChannel.appendLine(`[JSON] Tool result for: ${block.tool_use_id}`);
+                            this.outputChannel.appendLine(`[JSON] Tool result block structure: ${JSON.stringify(block, null, 2)}`);
                             
-                            
-                            // Extract text from MCP tool result content array
+                            // Extract text from various result formats
                             let resultText = block.text;
-                            if (!resultText && Array.isArray(block.content)) {
+                            
+                            // Try different content extraction methods
+                            if (!resultText && block.output) {
+                                // Some tools might have 'output' field
+                                resultText = typeof block.output === 'string' ? block.output : JSON.stringify(block.output);
+                                this.outputChannel.appendLine(`[JSON] Found result in 'output' field: ${resultText?.substring(0, 100)}...`);
+                            } else if (!resultText && Array.isArray(block.content)) {
                                 // Handle MCP tool results with content array
                                 const textContent = block.content.find((c: any) => c.type === 'text');
                                 resultText = textContent?.text || JSON.stringify(block.content);
@@ -1158,13 +1181,26 @@ export class ExtensionMessageHandler {
                             } else if (!resultText && block.content) {
                                 // Handle native tool results
                                 resultText = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                                this.outputChannel.appendLine(`[JSON] Found result in 'content' field: ${resultText?.substring(0, 100)}...`);
                             }
                             
+                            // Log if we still don't have result text
+                            if (!resultText) {
+                                this.outputChannel.appendLine(`[JSON] WARNING: No result text found for tool ${block.tool_use_id}`);
+                                resultText = ''; // Set empty string instead of undefined
+                            }
+                            
+                            // Remove from pending tools
+                            const wasInPending = this.pendingToolIds.has(block.tool_use_id);
+                            this.pendingToolIds.delete(block.tool_use_id);
+                            this.outputChannel.appendLine(`[JSON] Tool ${block.tool_use_id} was in pending: ${wasInPending}, remaining pending: ${this.pendingToolIds.size}`);
+                            
                             // Send tool result update to UI
+                            this.outputChannel.appendLine(`[JSON] Sending tool result to UI for ${block.tool_use_id} with status: complete`);
                             this.webviewProtocol?.post('message/toolResult', {
                                 toolId: block.tool_use_id,
                                 result: resultText,
-                                isError: block.is_error,
+                                isError: block.is_error || false,
                                 status: 'complete',
                                 parentToolUseId: json.parent_tool_use_id || undefined
                             });
