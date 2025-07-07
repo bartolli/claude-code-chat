@@ -13,7 +13,7 @@ import sessionReducer, {
   setError,
   clearSession,
   deleteSession,
-  loadSessions
+  loadSessions,
 } from '../../../state/slices/sessionSlice';
 import { SessionState } from '../../../types/state';
 import { ClaudeMessage } from '../../../types/claude';
@@ -24,7 +24,7 @@ suite('Session Slice Test Suite', () => {
     sessions: {},
     activeSession: undefined,
     isLoading: false,
-    error: undefined
+    error: undefined,
   };
 
   test('should handle initial state', () => {
@@ -36,9 +36,9 @@ suite('Session Slice Test Suite', () => {
     test('should create a new session', () => {
       const sessionId = 'test-123';
       const title = 'Test Session';
-      
+
       const state = sessionReducer(initialState, createSession({ sessionId, title }));
-      
+
       assert.ok(state.sessions[sessionId]);
       assert.strictEqual(state.sessions[sessionId].id, sessionId);
       assert.strictEqual(state.sessions[sessionId].title, title);
@@ -48,9 +48,9 @@ suite('Session Slice Test Suite', () => {
 
     test('should create session with default title', () => {
       const sessionId = 'test-456';
-      
+
       const state = sessionReducer(initialState, createSession({ sessionId }));
-      
+
       assert.strictEqual(state.sessions[sessionId].title, 'New Conversation');
     });
 
@@ -58,10 +58,10 @@ suite('Session Slice Test Suite', () => {
       // Create a session first
       let state = sessionReducer(initialState, createSession({ sessionId: 'session-1' }));
       state = sessionReducer(state, createSession({ sessionId: 'session-2' }));
-      
+
       // Set session-1 as current
       state = sessionReducer(state, setCurrentSession('session-1'));
-      
+
       assert.strictEqual(state.currentSessionId, 'session-1');
       assert.deepStrictEqual(state.activeSession, state.sessions['session-1']);
     });
@@ -69,7 +69,7 @@ suite('Session Slice Test Suite', () => {
     test('should handle setting undefined session', () => {
       let state = sessionReducer(initialState, createSession({ sessionId: 'session-1' }));
       state = sessionReducer(state, setCurrentSession(undefined));
-      
+
       assert.strictEqual(state.currentSessionId, undefined);
       assert.strictEqual(state.activeSession, undefined);
     });
@@ -77,14 +77,14 @@ suite('Session Slice Test Suite', () => {
     test('should update session title', () => {
       const sessionId = 'update-title-session';
       let state = sessionReducer(initialState, createSession({ sessionId }));
-      
+
       const newTitle = 'Updated Title';
       const beforeUpdate = state.sessions[sessionId].updatedAt;
-      
+
       // Wait a bit to ensure updatedAt changes
       setTimeout(() => {
         state = sessionReducer(state, updateSessionTitle({ sessionId, title: newTitle }));
-        
+
         assert.strictEqual(state.sessions[sessionId].title, newTitle);
         assert.ok(state.sessions[sessionId].updatedAt > beforeUpdate);
         assert.strictEqual(state.activeSession?.title, newTitle);
@@ -96,15 +96,15 @@ suite('Session Slice Test Suite', () => {
     test('should add message to session', () => {
       const sessionId = 'message-session';
       let state = sessionReducer(initialState, createSession({ sessionId }));
-      
+
       const message: ClaudeMessage = {
         role: 'user',
         content: 'Hello, Claude!',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
-      
+
       state = sessionReducer(state, addMessage({ sessionId, message }));
-      
+
       assert.strictEqual(state.sessions[sessionId].messages.length, 1);
       assert.deepStrictEqual(state.sessions[sessionId].messages[0], message);
       assert.strictEqual(state.activeSession?.messages.length, 1);
@@ -113,14 +113,17 @@ suite('Session Slice Test Suite', () => {
     test('should not add message to non-existent session', () => {
       const message: ClaudeMessage = {
         role: 'user',
-        content: 'Hello!'
+        content: 'Hello!',
       };
-      
-      const state = sessionReducer(initialState, addMessage({ 
-        sessionId: 'non-existent', 
-        message 
-      }));
-      
+
+      const state = sessionReducer(
+        initialState,
+        addMessage({
+          sessionId: 'non-existent',
+          message,
+        })
+      );
+
       assert.deepStrictEqual(state, initialState);
     });
   });
@@ -129,14 +132,17 @@ suite('Session Slice Test Suite', () => {
     test('should update token usage', () => {
       const sessionId = 'token-session';
       let state = sessionReducer(initialState, createSession({ sessionId }));
-      
-      state = sessionReducer(state, updateTokenUsage({
-        sessionId,
-        inputTokens: 100,
-        outputTokens: 200,
-        cost: 0.05
-      }));
-      
+
+      state = sessionReducer(
+        state,
+        updateTokenUsage({
+          sessionId,
+          inputTokens: 100,
+          outputTokens: 200,
+          cost: 0.05,
+        })
+      );
+
       assert.strictEqual(state.sessions[sessionId].totalInputTokens, 100);
       assert.strictEqual(state.sessions[sessionId].totalOutputTokens, 200);
       assert.strictEqual(state.sessions[sessionId].totalCost, 0.05);
@@ -145,23 +151,29 @@ suite('Session Slice Test Suite', () => {
     test('should accumulate token usage', () => {
       const sessionId = 'token-accumulate';
       let state = sessionReducer(initialState, createSession({ sessionId }));
-      
+
       // First update
-      state = sessionReducer(state, updateTokenUsage({
-        sessionId,
-        inputTokens: 100,
-        outputTokens: 200,
-        cost: 0.05
-      }));
-      
+      state = sessionReducer(
+        state,
+        updateTokenUsage({
+          sessionId,
+          inputTokens: 100,
+          outputTokens: 200,
+          cost: 0.05,
+        })
+      );
+
       // Second update
-      state = sessionReducer(state, updateTokenUsage({
-        sessionId,
-        inputTokens: 50,
-        outputTokens: 150,
-        cost: 0.03
-      }));
-      
+      state = sessionReducer(
+        state,
+        updateTokenUsage({
+          sessionId,
+          inputTokens: 50,
+          outputTokens: 150,
+          cost: 0.03,
+        })
+      );
+
       assert.strictEqual(state.sessions[sessionId].totalInputTokens, 150);
       assert.strictEqual(state.sessions[sessionId].totalOutputTokens, 350);
       assert.strictEqual(state.sessions[sessionId].totalCost, 0.08);
@@ -172,7 +184,7 @@ suite('Session Slice Test Suite', () => {
     test('should set loading state', () => {
       let state = sessionReducer(initialState, setLoading(true));
       assert.strictEqual(state.isLoading, true);
-      
+
       state = sessionReducer(state, setLoading(false));
       assert.strictEqual(state.isLoading, false);
     });
@@ -181,7 +193,7 @@ suite('Session Slice Test Suite', () => {
       const errorMessage = 'Test error';
       let state = sessionReducer(initialState, setError(errorMessage));
       assert.strictEqual(state.error, errorMessage);
-      
+
       state = sessionReducer(state, setError(undefined));
       assert.strictEqual(state.error, undefined);
     });
@@ -191,23 +203,29 @@ suite('Session Slice Test Suite', () => {
     test('should clear session', () => {
       const sessionId = 'clear-session';
       let state = sessionReducer(initialState, createSession({ sessionId }));
-      
+
       // Add some data
-      state = sessionReducer(state, updateTokenUsage({
-        sessionId,
-        inputTokens: 100,
-        outputTokens: 200,
-        cost: 0.05
-      }));
-      
-      state = sessionReducer(state, addMessage({
-        sessionId,
-        message: { role: 'user', content: 'Test' }
-      }));
-      
+      state = sessionReducer(
+        state,
+        updateTokenUsage({
+          sessionId,
+          inputTokens: 100,
+          outputTokens: 200,
+          cost: 0.05,
+        })
+      );
+
+      state = sessionReducer(
+        state,
+        addMessage({
+          sessionId,
+          message: { role: 'user', content: 'Test' },
+        })
+      );
+
       // Clear the session
       state = sessionReducer(state, clearSession(sessionId));
-      
+
       assert.strictEqual(state.sessions[sessionId].messages.length, 0);
       assert.strictEqual(state.sessions[sessionId].totalInputTokens, 0);
       assert.strictEqual(state.sessions[sessionId].totalOutputTokens, 0);
@@ -217,12 +235,12 @@ suite('Session Slice Test Suite', () => {
     test('should delete session', () => {
       const sessionId = 'delete-session';
       let state = sessionReducer(initialState, createSession({ sessionId }));
-      
+
       assert.ok(state.sessions[sessionId]);
       assert.strictEqual(state.currentSessionId, sessionId);
-      
+
       state = sessionReducer(state, deleteSession(sessionId));
-      
+
       assert.strictEqual(state.sessions[sessionId], undefined);
       assert.strictEqual(state.currentSessionId, undefined);
       assert.strictEqual(state.activeSession, undefined);
@@ -239,7 +257,7 @@ suite('Session Slice Test Suite', () => {
           messages: [],
           totalInputTokens: 0,
           totalOutputTokens: 0,
-          totalCost: 0
+          totalCost: 0,
         },
         'session-2': {
           id: 'session-2',
@@ -250,12 +268,12 @@ suite('Session Slice Test Suite', () => {
           messages: [],
           totalInputTokens: 100,
           totalOutputTokens: 200,
-          totalCost: 0.05
-        }
+          totalCost: 0.05,
+        },
       };
-      
+
       const state = sessionReducer(initialState, loadSessions(sessions));
-      
+
       assert.deepStrictEqual(state.sessions, sessions);
       assert.strictEqual(Object.keys(state.sessions).length, 2);
     });

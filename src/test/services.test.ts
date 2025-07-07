@@ -12,7 +12,6 @@ import { ServiceContainer } from '../services/ServiceContainer';
 import { isOk, isErr } from '../core/Result';
 
 suite('Phase 2: Service Layer', () => {
-  
   suite('ServiceContainer', () => {
     test('should create singleton instance', () => {
       const container1 = ServiceContainer.getInstance();
@@ -92,7 +91,7 @@ suite('Phase 2: Service Layer', () => {
     test('should handle git status when not in repo', async () => {
       const result = await gitService.getStatus('/tmp');
       assert.ok(isOk(result) || isErr(result));
-      
+
       if (isOk(result)) {
         assert.ok(typeof result.value.isGitRepo === 'boolean');
         assert.ok(typeof result.value.hasChanges === 'boolean');
@@ -145,7 +144,7 @@ suite('Phase 2: Service Layer', () => {
       const disposable = configService.onConfigChange(() => {
         called = true;
       });
-      
+
       // Clean up
       disposable.dispose();
       assert.ok(true); // Just verify no errors
@@ -155,18 +154,18 @@ suite('Phase 2: Service Layer', () => {
   suite('Integration', () => {
     test('services should work together', async () => {
       const container = ServiceContainer.getInstance();
-      
+
       // Config service should provide values for process manager
       const wslEnabled = container.configService.isWslEnabled();
       assert.ok(typeof wslEnabled === 'boolean');
-      
+
       // File service should work with git service
       const workspaceFolder = container.fileService.getWorkspaceFolder();
       if (workspaceFolder) {
         const gitStatus = await container.gitService.getStatus(workspaceFolder);
         assert.ok(isOk(gitStatus) || isErr(gitStatus));
       }
-      
+
       // All services should be accessible
       assert.ok(container.processManager);
       assert.ok(container.fileService);

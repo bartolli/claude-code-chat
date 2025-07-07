@@ -5,29 +5,76 @@
 import { getLogger } from './Logger';
 
 export interface ErrorOptions {
+  /**
+   *
+   */
   category: string;
+  /**
+   *
+   */
   retryable?: boolean;
+  /**
+   *
+   */
   retryCount?: number;
+  /**
+   *
+   */
   retryDelay?: number;
+  /**
+   *
+   */
   fallback?: () => unknown;
+  /**
+   *
+   */
   onError?: (error: Error) => void;
 }
 
 export interface ErrorContext {
+  /**
+   *
+   */
   code: string;
+  /**
+   *
+   */
   message: string;
+  /**
+   *
+   */
   category: string;
+  /**
+   *
+   */
   originalError: Error;
+  /**
+   *
+   */
   retryable: boolean;
+  /**
+   *
+   */
   retryCount: number;
 }
 
+/**
+ *
+ */
 export class ApplicationError extends Error {
   public readonly code: string;
   public readonly category: string;
   public readonly retryable: boolean;
   public readonly context?: unknown;
 
+  /**
+   *
+   * @param message
+   * @param code
+   * @param category
+   * @param retryable
+   * @param context
+   */
   constructor(
     message: string,
     code: string,
@@ -44,22 +91,41 @@ export class ApplicationError extends Error {
   }
 }
 
+/**
+ *
+ */
 export class AbortError extends ApplicationError {
+  /**
+   *
+   * @param message
+   */
   constructor(message = 'Operation aborted by user') {
     super(message, ErrorCodes.USER_ABORTED, 'Abort', false);
     this.name = 'AbortError';
   }
 }
 
+/**
+ *
+ */
 export class ErrorBoundary {
   private static readonly logger = getLogger();
 
-  public static async execute<T>(
-    operation: () => Promise<T>,
-    options: ErrorOptions
-  ): Promise<T> {
-    const { category, retryable = false, retryCount = 3, retryDelay = 1000, fallback, onError } = options;
-    
+  /**
+   *
+   * @param operation
+   * @param options
+   */
+  public static async execute<T>(operation: () => Promise<T>, options: ErrorOptions): Promise<T> {
+    const {
+      category,
+      retryable = false,
+      retryCount = 3,
+      retryDelay = 1000,
+      fallback,
+      onError,
+    } = options;
+
     let lastError: Error | undefined;
     let attempt = 0;
 
@@ -68,7 +134,7 @@ export class ErrorBoundary {
         return await operation();
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        
+
         ErrorBoundary.logger.error(
           category,
           `Operation failed (attempt ${attempt + 1}/${retryCount + 1})`,
@@ -95,7 +161,7 @@ export class ErrorBoundary {
         const delay = retryDelay * Math.pow(2, attempt);
         ErrorBoundary.logger.info(category, `Retrying in ${delay}ms...`);
         await ErrorBoundary.delay(delay);
-        
+
         attempt++;
       }
     }
@@ -124,17 +190,23 @@ export class ErrorBoundary {
     );
   }
 
-  public static wrap<T extends (...args: any[]) => any>(
-    fn: T,
-    options: ErrorOptions
-  ): T {
+  /**
+   *
+   * @param fn
+   * @param options
+   */
+  public static wrap<T extends (...args: any[]) => any>(fn: T, options: ErrorOptions): T {
     return (async (...args: Parameters<T>) => {
       return ErrorBoundary.execute(() => fn(...args), options);
     }) as T;
   }
 
+  /**
+   *
+   * @param ms
+   */
   private static delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
@@ -145,32 +217,32 @@ export const ErrorCodes = {
   OPERATION_FAILED: 'OPERATION_FAILED',
   INVALID_INPUT: 'INVALID_INPUT',
   NOT_FOUND: 'NOT_FOUND',
-  
+
   // Claude process errors
   CLAUDE_NOT_INSTALLED: 'CLAUDE_NOT_INSTALLED',
   CLAUDE_PROCESS_FAILED: 'CLAUDE_PROCESS_FAILED',
   CLAUDE_AUTHENTICATION_FAILED: 'CLAUDE_AUTHENTICATION_FAILED',
   CLAUDE_RATE_LIMITED: 'CLAUDE_RATE_LIMITED',
-  
+
   // File system errors
   FILE_READ_FAILED: 'FILE_READ_FAILED',
   FILE_WRITE_FAILED: 'FILE_WRITE_FAILED',
   FILE_NOT_FOUND: 'FILE_NOT_FOUND',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
-  
+
   // Git errors
   GIT_NOT_INSTALLED: 'GIT_NOT_INSTALLED',
   GIT_OPERATION_FAILED: 'GIT_OPERATION_FAILED',
   GIT_NOT_INITIALIZED: 'GIT_NOT_INITIALIZED',
-  
+
   // Communication errors
   MESSAGE_SEND_FAILED: 'MESSAGE_SEND_FAILED',
   MESSAGE_PARSE_FAILED: 'MESSAGE_PARSE_FAILED',
   WEBVIEW_NOT_READY: 'WEBVIEW_NOT_READY',
   TIMEOUT: 'TIMEOUT',
-  
+
   // User actions
   USER_ABORTED: 'USER_ABORTED',
 } as const;
 
-export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

@@ -15,14 +15,14 @@ suite('StateManager Test Suite', () => {
   setup(() => {
     // Reset store before each test
     store.dispatch(resetAllState());
-    
+
     stateManager = StateManager.getInstance();
     // Create a mock context for testing
     mockContext = {
       workspaceState: {
         get: (_key: string, defaultValue?: any) => defaultValue,
-        update: (_key: string, _value: any) => Promise.resolve()
-      }
+        update: (_key: string, _value: any) => Promise.resolve(),
+      },
     };
     stateManager.initialize(mockContext);
   });
@@ -46,12 +46,12 @@ suite('StateManager Test Suite', () => {
     test('should create a new session', () => {
       const sessionId = 'test-session-123';
       const title = 'Test Session';
-      
+
       stateManager.createOrResumeSession(sessionId, title);
-      
+
       const currentId = stateManager.getCurrentSessionId();
       assert.strictEqual(currentId, sessionId);
-      
+
       const state = stateManager.getState();
       assert.ok(state.session.sessions[sessionId]);
       assert.strictEqual(state.session.sessions[sessionId].title, title);
@@ -59,14 +59,14 @@ suite('StateManager Test Suite', () => {
 
     test('should resume existing session', () => {
       const sessionId = 'existing-session';
-      
+
       // Create session first
       stateManager.createOrResumeSession(sessionId, 'Original Title');
-      
+
       // Change current session
       stateManager.dispatch({ type: 'session/setCurrentSession', payload: undefined });
       assert.strictEqual(stateManager.getCurrentSessionId(), undefined);
-      
+
       // Resume the session
       stateManager.createOrResumeSession(sessionId);
       assert.strictEqual(stateManager.getCurrentSessionId(), sessionId);
@@ -80,14 +80,14 @@ suite('StateManager Test Suite', () => {
         session_id: sessionId,
         input_tokens: 100,
         output_tokens: 200,
-        cost: 0.05
+        cost: 0.05,
       };
-      
+
       stateManager.updateSessionFromResult(result);
-      
+
       const state = stateManager.getState();
       const session = state.session.sessions[sessionId];
-      
+
       assert.ok(session);
       assert.strictEqual(session.totalInputTokens, 100);
       assert.strictEqual(session.totalOutputTokens, 200);
@@ -116,7 +116,7 @@ suite('StateManager Test Suite', () => {
 
     test('should validate all supported models', () => {
       const validModels = ['opus', 'sonnet', 'default'];
-      
+
       for (const model of validModels) {
         const result = stateManager.setSelectedModel(model);
         assert.strictEqual(result, true);
@@ -129,7 +129,7 @@ suite('StateManager Test Suite', () => {
     test('should set Claude running state', () => {
       stateManager.setClaudeRunning(true);
       assert.strictEqual(stateManager.getState().ui.isClaudeRunning, true);
-      
+
       stateManager.setClaudeRunning(false);
       assert.strictEqual(stateManager.getState().ui.isClaudeRunning, false);
     });
@@ -137,7 +137,7 @@ suite('StateManager Test Suite', () => {
     test('should set webview ready state', () => {
       stateManager.setWebviewReady(true);
       assert.strictEqual(stateManager.getState().ui.isWebviewReady, true);
-      
+
       stateManager.setWebviewReady(false);
       assert.strictEqual(stateManager.getState().ui.isWebviewReady, false);
     });
@@ -147,9 +147,9 @@ suite('StateManager Test Suite', () => {
     test('should track process', () => {
       const sessionId = 'process-session';
       const pid = 12345;
-      
+
       stateManager.trackProcess(sessionId, pid);
-      
+
       const state = stateManager.getState();
       assert.ok(state.processes.activeProcesses[sessionId]);
       assert.strictEqual(state.processes.activeProcesses[sessionId].pid, pid);
@@ -158,10 +158,10 @@ suite('StateManager Test Suite', () => {
     test('should untrack process', () => {
       const sessionId = 'process-session-2';
       const pid = 54321;
-      
+
       stateManager.trackProcess(sessionId, pid);
       assert.ok(stateManager.getState().processes.activeProcesses[sessionId]);
-      
+
       stateManager.untrackProcess(sessionId);
       assert.strictEqual(stateManager.getState().processes.activeProcesses[sessionId], undefined);
     });
@@ -176,21 +176,21 @@ suite('StateManager Test Suite', () => {
         session_id: 'cost-session-1',
         input_tokens: 100,
         output_tokens: 200,
-        cost: 0.05
+        cost: 0.05,
       };
-      
+
       const result2: ClaudeResultMessage = {
         type: 'result',
         subtype: 'success',
         session_id: 'cost-session-2',
         input_tokens: 150,
         output_tokens: 300,
-        cost: 0.08
+        cost: 0.08,
       };
-      
+
       stateManager.updateSessionFromResult(result1);
       stateManager.updateSessionFromResult(result2);
-      
+
       const totalCost = stateManager.getTotalCost();
       assert.strictEqual(totalCost, 0.13);
     });
@@ -203,21 +203,21 @@ suite('StateManager Test Suite', () => {
         session_id: 'token-session-1',
         input_tokens: 100,
         output_tokens: 200,
-        cost: 0.05
+        cost: 0.05,
       };
-      
+
       const result2: ClaudeResultMessage = {
         type: 'result',
         subtype: 'success',
         session_id: 'token-session-2',
         input_tokens: 150,
         output_tokens: 300,
-        cost: 0.08
+        cost: 0.08,
       };
-      
+
       stateManager.updateSessionFromResult(result1);
       stateManager.updateSessionFromResult(result2);
-      
+
       const totals = stateManager.getTotalTokens();
       assert.strictEqual(totals.input, 250);
       assert.strictEqual(totals.output, 500);
@@ -227,7 +227,7 @@ suite('StateManager Test Suite', () => {
   suite('State Subscription', () => {
     test('should allow subscribing to state changes', (done) => {
       let callCount = 0;
-      
+
       const unsubscribe = stateManager.subscribe(() => {
         callCount++;
         if (callCount === 1) {
@@ -237,7 +237,7 @@ suite('StateManager Test Suite', () => {
           done();
         }
       });
-      
+
       // Trigger a state change
       stateManager.setSelectedModel('sonnet');
     });

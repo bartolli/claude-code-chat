@@ -12,39 +12,80 @@ export enum LogLevel {
 }
 
 export interface LogEntry {
+  /**
+   *
+   */
   level: LogLevel;
+  /**
+   *
+   */
   category: string;
+  /**
+   *
+   */
   message: string;
+  /**
+   *
+   */
   timestamp: Date;
+  /**
+   *
+   */
   data?: unknown;
+  /**
+   *
+   */
   error?: Error;
 }
 
+/**
+ *
+ */
 export class Logger {
   private static instance: Logger;
   private outputChannel: vscode.OutputChannel;
   private logLevel: LogLevel = LogLevel.INFO;
   private listeners: ((entry: LogEntry) => void)[] = [];
 
+  /**
+   *
+   * @param outputChannel
+   */
   private constructor(outputChannel?: vscode.OutputChannel) {
     this.outputChannel = outputChannel || vscode.window.createOutputChannel('Claude Code GUI');
   }
 
+  /**
+   *
+   * @param outputChannel
+   */
   public static getInstance(outputChannel?: vscode.OutputChannel): Logger {
     if (!Logger.instance) {
       Logger.instance = new Logger(outputChannel);
     }
     return Logger.instance;
   }
-  
+
+  /**
+   *
+   * @param outputChannel
+   */
   public setOutputChannel(outputChannel: vscode.OutputChannel): void {
     this.outputChannel = outputChannel;
   }
 
+  /**
+   *
+   * @param level
+   */
   public setLogLevel(level: LogLevel): void {
     this.logLevel = level;
   }
 
+  /**
+   *
+   * @param listener
+   */
   public addListener(listener: (entry: LogEntry) => void): () => void {
     this.listeners.push(listener);
     return () => {
@@ -55,7 +96,21 @@ export class Logger {
     };
   }
 
-  private log(level: LogLevel, category: string, message: string, data?: unknown, error?: Error): void {
+  /**
+   *
+   * @param level
+   * @param category
+   * @param message
+   * @param data
+   * @param error
+   */
+  private log(
+    level: LogLevel,
+    category: string,
+    message: string,
+    data?: unknown,
+    error?: Error
+  ): void {
     if (level < this.logLevel) {
       return;
     }
@@ -76,11 +131,11 @@ export class Logger {
 
     // Write to output channel
     this.outputChannel.appendLine(formattedMessage);
-    
+
     if (data) {
       this.outputChannel.appendLine(`  Data: ${JSON.stringify(data, null, 2)}`);
     }
-    
+
     if (error) {
       this.outputChannel.appendLine(`  Error: ${error.message}`);
       if (error.stack) {
@@ -89,7 +144,7 @@ export class Logger {
     }
 
     // Notify listeners
-    this.listeners.forEach(listener => {
+    this.listeners.forEach((listener) => {
       try {
         listener(entry);
       } catch (err) {
@@ -103,32 +158,67 @@ export class Logger {
     }
   }
 
+  /**
+   *
+   * @param category
+   * @param message
+   * @param data
+   */
   public debug(category: string, message: string, data?: unknown): void {
     this.log(LogLevel.DEBUG, category, message, data);
   }
 
+  /**
+   *
+   * @param category
+   * @param message
+   * @param data
+   */
   public info(category: string, message: string, data?: unknown): void {
     this.log(LogLevel.INFO, category, message, data);
   }
 
+  /**
+   *
+   * @param category
+   * @param message
+   * @param data
+   */
   public warn(category: string, message: string, data?: unknown): void {
     this.log(LogLevel.WARN, category, message, data);
   }
 
+  /**
+   *
+   * @param category
+   * @param message
+   * @param error
+   * @param data
+   */
   public error(category: string, message: string, error?: Error, data?: unknown): void {
     this.log(LogLevel.ERROR, category, message, data, error);
   }
 
+  /**
+   *
+   */
   public show(): void {
     this.outputChannel.show();
   }
 
+  /**
+   *
+   */
   public dispose(): void {
     this.outputChannel.dispose();
   }
 }
 
 // Helper function for easy access
+/**
+ *
+ * @param outputChannel
+ */
 export function getLogger(outputChannel?: vscode.OutputChannel): Logger {
   return Logger.getInstance(outputChannel);
 }

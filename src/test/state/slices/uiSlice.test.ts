@@ -9,7 +9,7 @@ import uiReducer, {
   setShowThinking,
   setShowCost,
   setToolExpanded,
-  clearExpandedTools
+  clearExpandedTools,
 } from '../../../state/slices/uiSlice';
 import { UIState } from '../../../types/state';
 
@@ -19,7 +19,7 @@ suite('UI Slice Test Suite', () => {
     isClaudeRunning: false,
     showThinking: false,
     showCost: true,
-    expandedTools: {}
+    expandedTools: {},
   };
 
   test('should handle initial state', () => {
@@ -78,32 +78,41 @@ suite('UI Slice Test Suite', () => {
 
   suite('Tool Expansion State', () => {
     test('should expand a tool', () => {
-      const state = uiReducer(initialState, setToolExpanded({ 
-        toolId: 'tool-1', 
-        expanded: true 
-      }));
+      const state = uiReducer(
+        initialState,
+        setToolExpanded({
+          toolId: 'tool-1',
+          expanded: true,
+        })
+      );
       assert.strictEqual(state.expandedTools['tool-1'], true);
     });
 
     test('should collapse a tool', () => {
-      let state = uiReducer(initialState, setToolExpanded({ 
-        toolId: 'tool-1', 
-        expanded: true 
-      }));
-      state = uiReducer(state, setToolExpanded({ 
-        toolId: 'tool-1', 
-        expanded: false 
-      }));
+      let state = uiReducer(
+        initialState,
+        setToolExpanded({
+          toolId: 'tool-1',
+          expanded: true,
+        })
+      );
+      state = uiReducer(
+        state,
+        setToolExpanded({
+          toolId: 'tool-1',
+          expanded: false,
+        })
+      );
       assert.strictEqual(state.expandedTools['tool-1'], undefined);
     });
 
     test('should handle multiple tool expansions', () => {
       let state = initialState;
-      
+
       state = uiReducer(state, setToolExpanded({ toolId: 'tool-1', expanded: true }));
       state = uiReducer(state, setToolExpanded({ toolId: 'tool-2', expanded: true }));
       state = uiReducer(state, setToolExpanded({ toolId: 'tool-3', expanded: false }));
-      
+
       assert.strictEqual(state.expandedTools['tool-1'], true);
       assert.strictEqual(state.expandedTools['tool-2'], true);
       assert.strictEqual(state.expandedTools['tool-3'], undefined);
@@ -111,15 +120,15 @@ suite('UI Slice Test Suite', () => {
 
     test('should clear all tool expansions', () => {
       let state = initialState;
-      
+
       // Expand multiple tools
       state = uiReducer(state, setToolExpanded({ toolId: 'tool-1', expanded: true }));
       state = uiReducer(state, setToolExpanded({ toolId: 'tool-2', expanded: true }));
       state = uiReducer(state, setToolExpanded({ toolId: 'tool-3', expanded: true }));
-      
+
       // Clear all expansions
       state = uiReducer(state, clearExpandedTools());
-      
+
       assert.deepStrictEqual(state.expandedTools, {});
     });
   });
@@ -127,13 +136,13 @@ suite('UI Slice Test Suite', () => {
   suite('Complex UI State Changes', () => {
     test('should handle multiple UI state changes', () => {
       let state = initialState;
-      
+
       state = uiReducer(state, setWebviewReady(true));
       state = uiReducer(state, setClaudeRunning(true));
       state = uiReducer(state, setShowThinking(true));
       state = uiReducer(state, setShowCost(false));
       state = uiReducer(state, setToolExpanded({ toolId: 'search', expanded: true }));
-      
+
       assert.strictEqual(state.isWebviewReady, true);
       assert.strictEqual(state.isClaudeRunning, true);
       assert.strictEqual(state.showThinking, true);

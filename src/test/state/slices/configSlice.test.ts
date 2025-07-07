@@ -8,7 +8,7 @@ import configReducer, {
   setAutoSave,
   setGitBackup,
   setTheme,
-  setFontSize
+  setFontSize,
 } from '../../../state/slices/configSlice';
 import { ConfigState } from '../../../types/state';
 
@@ -18,7 +18,7 @@ suite('Config Slice Test Suite', () => {
     autoSave: true,
     gitBackup: false,
     theme: 'dark',
-    fontSize: 14
+    fontSize: 14,
   };
 
   test('should handle initial state', () => {
@@ -103,19 +103,19 @@ suite('Config Slice Test Suite', () => {
   suite('Multiple Configuration Changes', () => {
     test('should handle multiple configuration changes', () => {
       let state = initialState;
-      
+
       state = configReducer(state, setSelectedModel('opus'));
       state = configReducer(state, setAutoSave(false));
       state = configReducer(state, setGitBackup(true));
       state = configReducer(state, setTheme('light'));
       state = configReducer(state, setFontSize(18));
-      
+
       assert.deepStrictEqual(state, {
         selectedModel: 'opus',
         autoSave: false,
         gitBackup: true,
         theme: 'light',
-        fontSize: 18
+        fontSize: 18,
       });
     });
   });
