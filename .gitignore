@@ -18,6 +18,9 @@ test_markdown/
 *.log
 output.log
 
+# Embedded git repos (demos)
+docs/hooks_demos/**/.git/
+
 # Debug files
 claude_commands_debug.bash
 mock-claude-process.js
