@@ -12,7 +12,7 @@ const initialState: UIState = {
   showThinking: false,
   showCost: true,
   expandedTools: {},
-  permissionRequest: null
+  permissionRequest: null,
 };
 
 const uiSlice = createSlice({
@@ -22,19 +22,19 @@ const uiSlice = createSlice({
     setWebviewReady: (state, action: PayloadAction<boolean>) => {
       state.isWebviewReady = action.payload;
     },
-    
+
     setClaudeRunning: (state, action: PayloadAction<boolean>) => {
       state.isClaudeRunning = action.payload;
     },
-    
+
     setShowThinking: (state, action: PayloadAction<boolean>) => {
       state.showThinking = action.payload;
     },
-    
+
     setShowCost: (state, action: PayloadAction<boolean>) => {
       state.showCost = action.payload;
     },
-    
+
     toggleToolExpanded: (state, action: PayloadAction<string>) => {
       const toolId = action.payload;
       if (state.expandedTools[toolId]) {
@@ -43,8 +43,21 @@ const uiSlice = createSlice({
         state.expandedTools[toolId] = true;
       }
     },
-    
-    setToolExpanded: (state, action: PayloadAction<{ toolId: string; expanded: boolean }>) => {
+
+    /**
+     * Set the expanded state of a specific tool
+     * @param state - The UI state
+     * @param action - Action containing tool ID and expanded state
+     */
+    setToolExpanded: (
+      state,
+      action: PayloadAction<{
+        /** ID of the tool to expand/collapse */
+        toolId: string;
+        /** Whether the tool should be expanded */
+        expanded: boolean;
+      }>
+    ) => {
       const { toolId, expanded } = action.payload;
       if (expanded) {
         state.expandedTools[toolId] = true;
@@ -52,24 +65,35 @@ const uiSlice = createSlice({
         delete state.expandedTools[toolId];
       }
     },
-    
+
     clearExpandedTools: (state) => {
       state.expandedTools = {};
     },
-    
-    showPermissionRequest: (state, action: PayloadAction<{
-      toolName: string;
-      toolId: string;
-      toolInput: any;
-    }>) => {
+
+    /**
+     * Show a permission request dialog for a tool
+     * @param state - The UI state
+     * @param action - Action containing tool permission request details
+     */
+    showPermissionRequest: (
+      state,
+      action: PayloadAction<{
+        /** Name of the tool requesting permission */
+        toolName: string;
+        /** ID of the tool requesting permission */
+        toolId: string;
+        /** Input parameters for the tool */
+        toolInput: any;
+      }>
+    ) => {
       state.permissionRequest = action.payload;
     },
-    
+
     clearPermissionRequest: (state) => {
       state.permissionRequest = null;
     },
-    
-    resetUI: () => initialState
+
+    resetUI: () => initialState,
   },
   extraReducers: (builder) => {
     builder.addCase(resetAllState, () => initialState);
@@ -77,7 +101,7 @@ const uiSlice = createSlice({
     builder.addCase('ui/showPermissionRequest', (state, action: any) => {
       state.permissionRequest = action.payload;
     });
-  }
+  },
 });
 
 export const {
@@ -90,7 +114,7 @@ export const {
   clearExpandedTools,
   showPermissionRequest,
   clearPermissionRequest,
-  resetUI
+  resetUI,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

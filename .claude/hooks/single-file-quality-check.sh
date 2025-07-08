@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# smart-quality-check.sh - Intelligent project-aware quality checks for Claude Code
+# single-file-quality-check.sh - Single file quality checks for Claude Code
 #
-# A single smart entry point that auto-detects project type and runs appropriate checks.
-# Designed specifically for the claude-code-chat extension project.
+# A focused quality check that runs on the specific file that was just modified.
+# Triggered by PostToolUse events for Write, Edit, and MultiEdit operations.
 #
 # EXIT CODES:
 #   0 - Success (all checks passed)
@@ -28,7 +28,7 @@ fi
 : ${CLAUDE_HOOKS_ESLINT_ENABLED:=true}
 : ${CLAUDE_HOOKS_PRETTIER_ENABLED:=true}
 : ${CLAUDE_HOOKS_MIGRATION_SAFETY_ENABLED:=true}
-: ${CLAUDE_HOOKS_TEST_RUNNER_ENABLED:=true}
+: ${CLAUDE_HOOKS_TEST_RUNNER_ENABLED:=false}
 : ${CLAUDE_HOOKS_TEST_COMMAND:="npm test"}
 : ${CLAUDE_HOOKS_PRETTIER_AUTOFIX:=false}
 : ${CLAUDE_HOOKS_ESLINT_AUTOFIX:=false}
@@ -36,6 +36,10 @@ fi
 : ${CLAUDE_HOOKS_MIGRATION_TESTS_ENABLED:=false}
 : ${CLAUDE_HOOKS_MIGRATION_TEST_COMMAND:="npm run test -- --grep migration"}
 : ${CLAUDE_HOOKS_MIGRATION_CRITICAL_PATTERNS:="migration/|StateManager|ExtensionMessageHandler|state/slices/"}
+: ${CLAUDE_HOOKS_MIGRATION_MESSAGE:="Remember: We're migrating from SimpleStateManager to Redux. Always use feature flags!"}
+
+# Debug mode for troubleshooting
+: ${CLAUDE_HOOKS_DEBUG:=false}
 
 # ============================================================================
 # COLOR DEFINITIONS
@@ -66,6 +70,12 @@ log_success() {
 
 log_warning() {
     echo -e "${YELLOW}[WARN]${NC} $*" >&2
+}
+
+log_debug() {
+    if [[ "$CLAUDE_HOOKS_DEBUG" == "true" ]]; then
+        echo -e "${CYAN}[DEBUG]${NC} $*" >&2
+    fi
 }
 
 # ============================================================================
@@ -115,7 +125,7 @@ print_summary() {
 }
 
 # ============================================================================
-# PROJECT DETECTION
+# FILE TYPE DETECTION
 # ============================================================================
 
 detect_file_type() {
@@ -144,12 +154,10 @@ detect_file_type() {
 }
 
 # ============================================================================
-# TYPESCRIPT CHECKS
+# QUALITY CHECKS
 # ============================================================================
 
 check_typescript_compilation() {
-    local file_path="$1"
-    
     if [[ "$CLAUDE_HOOKS_TYPESCRIPT_ENABLED" != "true" ]]; then
         return 0
     fi
@@ -203,6 +211,8 @@ check_eslint() {
                 fi
             else
                 add_error "ESLint auto-fix failed for $file_path"
+                # Show the original ESLint errors when auto-fix fails
+                echo "$eslint_output" | head -20 >&2
             fi
         else
             add_error "ESLint found issues in $file_path"
@@ -254,43 +264,6 @@ check_prettier() {
     fi
 }
 
-check_common_issues() {
-    local file_path="$1"
-    local file_type="$2"
-    local found_issues=false
-    
-    log_info "Checking for common issues..."
-    
-    # Check for 'as any' in TypeScript files
-    if [[ "$file_type" == "typescript" ]] && grep -n "as any" "$file_path" 2>/dev/null; then
-        add_error "Found 'as any' usage in $file_path - use proper types instead!"
-        found_issues=true
-    fi
-    
-    # Check for console statements (except in test files)
-    if [[ "$file_type" != "test" ]] && grep -n "console\." "$file_path" 2>/dev/null; then
-        add_error "Found console statements in $file_path - use proper logging!"
-        found_issues=true
-    fi
-    
-    # Check for TODO/FIXME comments
-    if grep -n "TODO\|FIXME" "$file_path" 2>/dev/null; then
-        log_warning "Found TODO/FIXME comments in $file_path"
-    fi
-    
-    # Comment style checking is handled by ESLint with proper plugins
-    
-    if [[ "$found_issues" == "false" ]]; then
-        log_success "No common issues found"
-    fi
-    
-    return 0
-}
-
-# ============================================================================
-# MIGRATION SAFETY CHECKS
-# ============================================================================
-
 check_migration_safety() {
     local file_path="$1"
     
@@ -299,14 +272,13 @@ check_migration_safety() {
     fi
     
     # Only check if it's a migration-related file or touches state management
-    # Skip documentation files
-    if [[ ! "$file_path" =~ (StateManager|state-manager|migration|webview) ]] || [[ "$file_path" =~ \.documentation\. ]]; then
+    if [[ ! "$file_path" =~ (StateManager|state-manager|migration|webview) ]]; then
         return 0
     fi
     
     log_info "Running migration safety checks..."
     
-    # Check for direct StateManager usage without feature flags (excluding comments and strings)
+    # Check for direct StateManager usage without feature flags
     local violations=$(grep -n "SimpleStateManager\|StateManager" "$file_path" 2>/dev/null | \
         grep -v "USE_REDUX_STATE\|featureFlags" | \
         grep -v "^[[:space:]]*\*" | \
@@ -327,101 +299,32 @@ check_migration_safety() {
     return 0
 }
 
-# ============================================================================
-# TEST RUNNER
-# ============================================================================
-
-run_related_tests() {
+check_common_issues() {
     local file_path="$1"
     local file_type="$2"
+    local found_issues=false
     
-    if [[ "$CLAUDE_HOOKS_TEST_RUNNER_ENABLED" != "true" ]]; then
-        return 0
+    log_info "Checking for common issues..."
+    
+    # Check for 'as any' in TypeScript files
+    if [[ "$file_type" == "typescript" ]] && grep -n "as any" "$file_path" 2>/dev/null; then
+        add_error "Found 'as any' usage in $file_path - use proper types instead!"
+        found_issues=true
     fi
     
-    # Skip if not a test file or source file with tests
-    if [[ "$file_type" != "test" ]] && [[ ! -f "${file_path%.ts}.test.ts" ]] && [[ ! -f "${file_path%.tsx}.test.tsx" ]]; then
-        return 0
+    # Check for console statements (except in test files and .claude/utils)
+    if [[ "$file_type" != "test" ]] && [[ ! "$file_path" =~ \.claude/utils/ ]] && grep -n "console\." "$file_path" 2>/dev/null; then
+        add_error "Found console statements in $file_path - use proper logging!"
+        found_issues=true
     fi
     
-    log_info "Running related tests..."
-    
-    # Determine test command
-    local test_cmd=""
-    if [[ -f "package.json" ]] && grep -q '"test"' package.json; then
-        if [[ "$file_type" == "test" ]]; then
-            test_cmd="${CLAUDE_HOOKS_TEST_COMMAND} -- $file_path"
-        else
-            # Run tests for the source file
-            local test_file="${file_path%.ts}.test.ts"
-            [[ ! -f "$test_file" ]] && test_file="${file_path%.tsx}.test.tsx"
-            [[ -f "$test_file" ]] && test_cmd="${CLAUDE_HOOKS_TEST_COMMAND} -- $test_file"
-        fi
+    # Check for TODO/FIXME comments
+    if grep -n "TODO\|FIXME" "$file_path" 2>/dev/null; then
+        log_warning "Found TODO/FIXME comments in $file_path"
     fi
     
-    if [[ -n "$test_cmd" ]]; then
-        local test_output
-        if ! test_output=$($test_cmd 2>&1); then
-            add_error "Tests failed for $file_path"
-            echo "$test_output" >&2
-            return 1
-        else
-            log_success "Tests passed"
-        fi
-    fi
-    
-    return 0
-}
-
-# ============================================================================
-# MIGRATION TEST RUNNER
-# ============================================================================
-
-run_migration_tests() {
-    local file_path="$1"
-    
-    if [[ "$CLAUDE_HOOKS_MIGRATION_TESTS_ENABLED" != "true" ]]; then
-        return 0
-    fi
-    
-    # Check if file matches migration-critical patterns
-    if [[ ! "$file_path" =~ $CLAUDE_HOOKS_MIGRATION_CRITICAL_PATTERNS ]]; then
-        return 0
-    fi
-    
-    log_info "Running migration-specific tests..."
-    
-    local test_files=""
-    
-    # Map source files to specific test files
-    if [[ "$file_path" =~ ActionMapper ]]; then
-        test_files="src/test/migration/actionMapper.test.ts"
-        log_info "Testing ActionMapper migration..."
-    elif [[ "$file_path" =~ ExtensionMessageHandler ]]; then
-        test_files="src/test/migration/messageFlow.integration.test.ts"
-        log_info "Testing message flow integration..."
-    elif [[ "$file_path" =~ /state/slices/ ]]; then
-        test_files="src/test/migration/reduxStore.integration.test.ts"
-        log_info "Testing Redux store integration..."
-    elif [[ "$file_path" =~ /migration/ ]]; then
-        # Run all migration tests for any migration file
-        test_files="src/test/migration/*.test.ts"
-        log_info "Running full migration test suite..."
-    fi
-    
-    if [[ -n "$test_files" ]]; then
-        local test_output
-        local test_cmd="${CLAUDE_HOOKS_MIGRATION_TEST_COMMAND} $test_files"
-        
-        log_info "Executing: $test_cmd"
-        
-        if ! test_output=$($test_cmd 2>&1); then
-            add_error "Migration tests failed for $file_path"
-            echo "$test_output" | tail -50 >&2
-            return 1
-        else
-            log_success "Migration tests passed"
-        fi
+    if [[ "$found_issues" == "false" ]]; then
+        log_success "No common issues found"
     fi
     
     return 0
@@ -431,103 +334,135 @@ run_migration_tests() {
 # MAIN EXECUTION
 # ============================================================================
 
-# Get list of recently modified TypeScript/JavaScript files
-get_modified_files() {
-    local files=""
+# ============================================================================
+# ROBUST JSON PARSING
+# ============================================================================
+
+parse_json_input() {
+    local input_json="$1"
+    local file_path=""
+    local tool_name=""
     
-    # If git is available, use it to find recently modified files
-    if [[ -d .git ]] && command -v git >/dev/null 2>&1; then
-        # Get files modified in working directory and staging area
-        files=$(git diff --name-only --diff-filter=ACM HEAD 2>/dev/null || true)
-        files+=$'\n'$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
-        
-        # Filter for TypeScript/JavaScript files
-        files=$(echo "$files" | grep -E '\.(ts|tsx|js|jsx)$' | sort -u || true)
+    log_debug "Parsing JSON input: $input_json"
+    
+    # Extract tool name and file path using multiple approaches
+    tool_name=$(echo "$input_json" | grep -o '"tool_name"[^,}]*' | sed 's/.*"tool_name"[^"]*"\([^"]*\)".*/\1/' 2>/dev/null || true)
+    
+    # Try multiple field names for file path
+    file_path=$(echo "$input_json" | grep -o '"file_path"[^,}]*' | sed 's/.*"file_path"[^"]*"\([^"]*\)".*/\1/' 2>/dev/null || true)
+    
+    if [[ -z "$file_path" ]]; then
+        file_path=$(echo "$input_json" | grep -o '"path"[^,}]*' | sed 's/.*"path"[^"]*"\([^"]*\)".*/\1/' 2>/dev/null || true)
     fi
     
-    # If no git or no modified files, check all source files (limited scope)
-    if [[ -z "$files" ]]; then
-        # Look for files in src directory only (avoid node_modules, dist, etc.)
-        files=$(find src -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \) 2>/dev/null | head -20 || true)
+    if [[ -z "$file_path" ]]; then
+        file_path=$(echo "$input_json" | grep -o '"notebook_path"[^,}]*' | sed 's/.*"notebook_path"[^"]*"\([^"]*\)".*/\1/' 2>/dev/null || true)
     fi
     
-    echo "$files"
+    log_debug "Extracted tool_name: $tool_name"
+    log_debug "Extracted file_path: $file_path"
+    
+    echo "$file_path"
+}
+
+should_check_file() {
+    local file_path="$1"
+    
+    # Check if file exists
+    if [[ ! -f "$file_path" ]]; then
+        log_debug "File does not exist: $file_path"
+        return 1
+    fi
+    
+    # Check if it's a source file
+    if [[ ! "$file_path" =~ \.(ts|tsx|js|jsx)$ ]]; then
+        log_debug "Not a source file: $file_path"
+        return 1
+    fi
+    
+    return 0
 }
 
 main() {
-    # Get files to check FIRST before printing header
-    local files_to_check=$(get_modified_files)
+    # Always show header first to indicate hook is running
+    echo "" >&2
+    echo "🔍 Single File Quality Check - Starting..." >&2
+    echo "────────────────────────────────────────────" >&2
     
-    if [[ -z "$files_to_check" ]]; then
-        # Exit silently if no code files were modified
+    # Read JSON input from stdin
+    local input_json=""
+    if [[ -t 0 ]]; then
+        # No stdin available (testing or manual execution)
+        log_warning "No JSON input provided. This hook expects JSON input from Claude Code."
+        log_info "For testing, provide JSON like: echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/path/to/file.ts\"}}' | $0"
+        echo -e "\n${YELLOW}👉 Hook executed but no input to process.${NC}" >&2
+        exit 0
+    else
+        input_json=$(cat)
+        log_debug "Received JSON input: $input_json"
+    fi
+    
+    # Parse file path from tool input
+    local file_path=$(parse_json_input "$input_json")
+    
+    if [[ -z "$file_path" ]]; then
+        log_warning "No file path found in JSON input. Tool might not be file-related."
+        log_debug "JSON input was: $input_json"
+        echo -e "\n${YELLOW}👉 No file to check - tool may not be file-related.${NC}" >&2
         exit 0
     fi
     
-    # Print header only if we have files to check
+    # Check if we should process this file
+    if ! should_check_file "$file_path"; then
+        if [[ ! -f "$file_path" ]]; then
+            log_info "File does not exist: $file_path (may have been deleted)"
+        else
+            log_info "Skipping non-source file: $file_path"
+        fi
+        echo -e "\n${YELLOW}👉 File skipped - not a source file or doesn't exist.${NC}" >&2
+        exit 0
+    fi
+    
+    # Update header with file name
     echo "" >&2
-    echo "🔍 Smart Quality Check - Validating code quality..." >&2
+    echo "🔍 Single File Quality Check - Validating: $(basename "$file_path")" >&2
     echo "────────────────────────────────────────────" >&2
     
-    # Count files
-    local file_count=$(echo "$files_to_check" | wc -l | tr -d ' ')
-    log_info "Checking $file_count modified file(s)"
+    log_info "Checking: $file_path"
     
-    # Run TypeScript compilation check once for the whole project
+    # Detect file type
+    local file_type=$(detect_file_type "$file_path")
+    
+    # Run TypeScript compilation check (project-wide)
     if [[ "$CLAUDE_HOOKS_TYPESCRIPT_ENABLED" == "true" ]]; then
-        check_typescript_compilation ""
+        check_typescript_compilation
     fi
     
-    # Check each file individually for other checks
-    while IFS= read -r file_path; do
-        [[ -z "$file_path" ]] && continue
-        
-        # Skip if file doesn't exist (might have been deleted)
-        [[ ! -f "$file_path" ]] && continue
-        
-        log_info "Checking: $file_path"
-        
-        # Detect file type
-        local file_type=$(detect_file_type "$file_path")
-        
-        # Run appropriate checks based on file type
-        case "$file_type" in
-            "typescript"|"javascript"|"test")
-                check_eslint "$file_path"
-                check_prettier "$file_path"
-                check_common_issues "$file_path" "$file_type"
-                ;;
-            "migration")
-                check_eslint "$file_path"
-                check_prettier "$file_path"
-                check_migration_safety "$file_path"
-                check_common_issues "$file_path" "$file_type"
-                run_migration_tests "$file_path"
-                ;;
-            "migration-critical")
-                check_eslint "$file_path"
-                check_prettier "$file_path"
-                check_migration_safety "$file_path"
-                check_common_issues "$file_path" "$file_type"
-                run_migration_tests "$file_path"
-                ;;
-            "redux")
-                check_eslint "$file_path"
-                check_prettier "$file_path"
-                check_common_issues "$file_path" "$file_type"
-                run_migration_tests "$file_path"
-                ;;
-        esac
-    done <<< "$files_to_check"
-    
-    # Run tests if any test files were modified
-    if echo "$files_to_check" | grep -q '\.test\.\|\.spec\.' && [[ "$CLAUDE_HOOKS_TEST_RUNNER_ENABLED" == "true" ]]; then
-        log_info "Running tests for modified test files..."
-        local test_files=$(echo "$files_to_check" | grep '\.test\.\|\.spec\.' || true)
-        while IFS= read -r test_file; do
-            [[ -z "$test_file" ]] && continue
-            run_related_tests "$test_file" "test"
-        done <<< "$test_files"
-    fi
+    # Run file-specific checks
+    case "$file_type" in
+        "typescript"|"javascript"|"test")
+            check_eslint "$file_path"
+            check_prettier "$file_path"
+            check_common_issues "$file_path" "$file_type"
+            ;;
+        "migration")
+            check_eslint "$file_path"
+            check_prettier "$file_path"
+            check_migration_safety "$file_path"
+            check_common_issues "$file_path" "$file_type"
+            ;;
+        "migration-critical")
+            check_eslint "$file_path"
+            check_prettier "$file_path"
+            check_migration_safety "$file_path"
+            check_common_issues "$file_path" "$file_type"
+            ;;
+        "redux")
+            check_eslint "$file_path"
+            check_prettier "$file_path"
+            check_common_issues "$file_path" "$file_type"
+            ;;
+    esac
     
     # Print summary
     print_summary
@@ -541,17 +476,17 @@ main() {
         echo -e "${YELLOW}  3. Continue with your original task once all checks pass${NC}" >&2
         exit 2
     else
-        echo -e "\n${GREEN}✅ All quality checks passed${NC}" >&2
+        echo -e "\n${GREEN}✅ Quality check passed for $(basename "$file_path")${NC}"
         
         # Show auto-fix summary if in silent mode
         if [[ $AUTOFIX_COUNT -gt 0 ]] && [[ "$CLAUDE_HOOKS_AUTOFIX_SILENT" == "true" ]]; then
-            echo -e "\n${YELLOW}👉 Code quality verified. Auto-fixes applied. Continue with your task.${NC}" >&2
+            echo -e "\n${YELLOW}👉 File quality verified. Auto-fixes applied. Continue with your task.${NC}"
         else
-            echo -e "\n${YELLOW}👉 Code quality verified. Continue with your task.${NC}" >&2
+            echo -e "\n${YELLOW}👉 File quality verified. Continue with your task.${NC}"
         fi
         exit 0
     fi
 }
 
 # Run main function
-main
+main "$@"

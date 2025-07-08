@@ -35,6 +35,7 @@
 		".vscode-test",
 		"node_modules/@types/glob",
 		"src/webview/**/*",
-		"src/test/**/*"
+		"src/test/**/*",
+		"docs/**/*"
 	]
 }

@@ -3,18 +3,28 @@
  */
 
 export interface ToolUse {
+  /** The name/type of the tool being used */
   toolName: string;
+  /** Unique identifier for this specific tool invocation */
   toolId: string;
+  /** Input parameters passed to the tool */
   input: any;
+  /** Result returned from the tool execution */
   result?: string;
+  /** Indicates whether the tool execution resulted in an error */
   isError?: boolean;
+  /** ID of the parent tool if this is a nested tool call */
   parentToolUseId?: string;
 }
 
 export interface ToolChain {
+  /** Unique identifier of the root tool in this chain */
   rootToolId: string;
+  /** The root tool use object for this chain */
   rootTool: ToolUse;
+  /** Array of child tool chains (nested tool calls) */
   children: ToolChain[];
+  /** Depth level of this chain in the hierarchy (0 for root) */
   depth: number;
 }
 
@@ -27,31 +37,36 @@ export function buildToolHierarchy(toolUses: ToolUse[]): ToolChain[] {
   const toolMap = new Map<string, ToolUse>();
   const childrenMap = new Map<string, ToolUse[]>();
   const rootChains: ToolChain[] = [];
-  
+
   // First pass: Create maps for quick lookup
-  toolUses.forEach(tool => {
+  toolUses.forEach((tool) => {
     toolMap.set(tool.toolId, tool);
-    
+
     if (tool.parentToolUseId) {
       const siblings = childrenMap.get(tool.parentToolUseId) || [];
       siblings.push(tool);
       childrenMap.set(tool.parentToolUseId, siblings);
     }
   });
-  
+
   // Second pass: Build chains starting from roots (tools with no parent)
-  toolUses.forEach(tool => {
+  toolUses.forEach((tool) => {
     if (!tool.parentToolUseId) {
       const chain = buildChainRecursive(tool, toolMap, childrenMap, 0);
       rootChains.push(chain);
     }
   });
-  
+
   return rootChains;
 }
 
 /**
  * Recursively builds a tool chain from a root tool
+ * @param tool - The root tool to start building the chain from
+ * @param toolMap - Map of tool IDs to tool use objects for quick lookup
+ * @param childrenMap - Map of parent tool IDs to their child tools
+ * @param depth - Current depth level in the hierarchy
+ * @returns A complete tool chain with the given tool as root
  */
 function buildChainRecursive(
   tool: ToolUse,
@@ -60,14 +75,12 @@ function buildChainRecursive(
   depth: number
 ): ToolChain {
   const children = childrenMap.get(tool.toolId) || [];
-  
+
   return {
     rootToolId: tool.toolId,
     rootTool: tool,
-    children: children.map(child => 
-      buildChainRecursive(child, toolMap, childrenMap, depth + 1)
-    ),
-    depth
+    children: children.map((child) => buildChainRecursive(child, toolMap, childrenMap, depth + 1)),
+    depth,
   };
 }
 
@@ -79,11 +92,11 @@ function buildChainRecursive(
  */
 export function flattenToolChain(chain: ToolChain): ToolUse[] {
   const result: ToolUse[] = [chain.rootTool];
-  
-  chain.children.forEach(child => {
+
+  chain.children.forEach((child) => {
     result.push(...flattenToolChain(child));
   });
-  
+
   return result;
 }
 
@@ -94,11 +107,11 @@ export function flattenToolChain(chain: ToolChain): ToolUse[] {
  */
 export function getToolChainCount(chain: ToolChain): number {
   let count = 1; // Count the root
-  
-  chain.children.forEach(child => {
+
+  chain.children.forEach((child) => {
     count += getToolChainCount(child);
   });
-  
+
   return count;
 }
 
@@ -111,8 +124,8 @@ export function getToolChainDepth(chain: ToolChain): number {
   if (chain.children.length === 0) {
     return chain.depth;
   }
-  
-  return Math.max(...chain.children.map(child => getToolChainDepth(child)));
+
+  return Math.max(...chain.children.map((child) => getToolChainDepth(child)));
 }
 
 /**
@@ -124,8 +137,8 @@ export function isToolChainComplete(chain: ToolChain): boolean {
   if (!chain.rootTool.result) {
     return false;
   }
-  
-  return chain.children.every(child => isToolChainComplete(child));
+
+  return chain.children.every((child) => isToolChainComplete(child));
 }
 
 /**
@@ -137,8 +150,8 @@ export function hasToolChainError(chain: ToolChain): boolean {
   if (chain.rootTool.isError) {
     return true;
   }
-  
-  return chain.children.some(child => hasToolChainError(child));
+
+  return chain.children.some((child) => hasToolChainError(child));
 }
 
 /**
@@ -146,20 +159,22 @@ export function hasToolChainError(chain: ToolChain): boolean {
  * @param chain - Tool chain to check
  * @returns 'pending' | 'executing' | 'complete' | 'error'
  */
-export function getToolChainStatus(chain: ToolChain): 'pending' | 'executing' | 'complete' | 'error' {
+export function getToolChainStatus(
+  chain: ToolChain
+): 'pending' | 'executing' | 'complete' | 'error' {
   if (hasToolChainError(chain)) {
     return 'error';
   }
-  
+
   if (isToolChainComplete(chain)) {
     return 'complete';
   }
-  
+
   // If root has result but children don't, it's executing
   if (chain.rootTool.result && chain.children.length > 0) {
     return 'executing';
   }
-  
+
   return 'pending';
 }
 
@@ -170,13 +185,13 @@ export function getToolChainStatus(chain: ToolChain): 'pending' | 'executing' | 
  */
 export function groupToolChainsByType(chains: ToolChain[]): Map<string, ToolChain[]> {
   const groups = new Map<string, ToolChain[]>();
-  
-  chains.forEach(chain => {
+
+  chains.forEach((chain) => {
     const toolType = chain.rootTool.toolName;
     const group = groups.get(toolType) || [];
     group.push(chain);
     groups.set(toolType, group);
   });
-  
+
   return groups;
 }

@@ -84,11 +84,138 @@ Following best practices from the reference implementation, this hook:
 5. **Error Collection**: All issues are collected and reported together
 6. **Auto-fixing**: Optionally fixes formatting and linting issues automatically
 
+## Manual Testing with Echo Pipeline
+
+You can manually test the hooks using echo to provide JSON input. Here are practical examples using real files from our codebase:
+
+### Basic Testing
+```bash
+# Test with a service file
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/services/ClaudeService.ts"}}' | .claude/hooks/single-file-quality-check.sh
+
+# Test with a state management file
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/state/StateManager.ts"}}' | .claude/hooks/single-file-quality-check.sh
+
+# Test with a test file (different rules apply)
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/test/migration/actionMapper.test.ts"}}' | .claude/hooks/single-file-quality-check.sh
+```
+
+### Testing Different Tool Types
+```bash
+# Edit tool - simulating a file edit
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/core/Logger.ts","old_string":"debug(","new_string":"info("}}' | .claude/hooks/single-file-quality-check.sh
+
+# Write tool - simulating file creation
+echo '{"tool_name":"Write","tool_input":{"file_path":"src/services/NewService.ts","content":"export class NewService {}"}}' | .claude/hooks/single-file-quality-check.sh
+
+# MultiEdit tool - simulating multiple edits
+echo '{"tool_name":"MultiEdit","tool_input":{"file_path":"src/protocol/WebviewProtocol.ts","edits":[{"old_string":"console.log","new_string":"this.logger.debug"}]}}' | .claude/hooks/single-file-quality-check.sh
+```
+
+### Using Heredoc for Complex JSON
+```bash
+# More readable format for complex tool inputs
+cat <<EOF | .claude/hooks/single-file-quality-check.sh
+{
+  "tool_name": "MultiEdit",
+  "tool_input": {
+    "file_path": "src/state/slices/sessionSlice.ts",
+    "edits": [
+      {
+        "old_string": "console.log('Session created')",
+        "new_string": "// Session created"
+      },
+      {
+        "old_string": "any",
+        "new_string": "unknown"
+      }
+    ]
+  }
+}
+EOF
+```
+
+### Debugging Hook Execution
+```bash
+# Enable debug mode to see detailed processing
+export CLAUDE_HOOKS_DEBUG=true
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/migration/StateComparator.ts"}}' | .claude/hooks/single-file-quality-check.sh
+
+# Check exit code
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/extension.ts"}}' | .claude/hooks/single-file-quality-check.sh
+echo "Exit code: $?"
+
+# Capture and analyze output
+OUTPUT=$(echo '{"tool_name":"Edit","tool_input":{"file_path":"src/webview/WebviewManager.ts"}}' | .claude/hooks/single-file-quality-check.sh 2>&1)
+echo "$OUTPUT"
+
+# Test with a non-existent file
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/does-not-exist.ts"}}' | .claude/hooks/single-file-quality-check.sh
+
+# Test with invalid JSON (should show error)
+echo 'invalid json' | .claude/hooks/single-file-quality-check.sh
+```
+
+### Common Test Scenarios
+```bash
+# Test migration-critical file (extra safety checks)
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/state/SimpleStateManager.ts"}}' | .claude/hooks/single-file-quality-check.sh
+
+# Test Redux slice file
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/state/slices/claudeSlice.ts"}}' | .claude/hooks/single-file-quality-check.sh
+
+# Test protocol file
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/protocol/IdeMessenger.ts"}}' | .claude/hooks/single-file-quality-check.sh
+
+# Test with auto-fix enabled (check your config)
+export CLAUDE_HOOKS_PRETTIER_AUTOFIX=true
+export CLAUDE_HOOKS_ESLINT_AUTOFIX=true
+echo '{"tool_name":"Edit","tool_input":{"file_path":"src/services/FileService.ts"}}' | .claude/hooks/single-file-quality-check.sh
+```
+
 ## Exit Codes
 
 - `0`: Success - all checks passed ✅
 - `1`: Setup error - missing dependencies
 - `2`: **BLOCKING** - quality issues found ❌
+
+## Critical: Output Stream Handling (stdout vs stderr)
+
+⚠️ **This is crucial for hook visibility in Claude Code!**
+
+### The Problem We Discovered
+Our hook was sending ALL output to stderr (`>&2`), including success messages. This caused success messages to be invisible in the Claude Code interface because:
+
+1. **Exit code 0 (success)**: Claude Code displays **stdout** to the user
+2. **Exit code 2 (blocking)**: Claude Code shows **stderr** to Claude for processing
+3. **Other exit codes**: stderr shown to user, execution continues
+
+### The Solution
+- **Success messages** → Send to **stdout** (no `>&2`)
+- **Error messages** → Send to **stderr** (use `>&2`)
+
+### Example Implementation
+```bash
+# ❌ WRONG - Success message to stderr (invisible to user)
+echo -e "${GREEN}✅ Quality check passed${NC}" >&2
+
+# ✅ CORRECT - Success message to stdout (visible to user)
+echo -e "${GREEN}✅ Quality check passed${NC}"
+
+# ✅ CORRECT - Error message to stderr (for exit code 2)
+echo -e "${RED}❌ TypeScript errors found${NC}" >&2
+```
+
+### Why This Matters
+- Without proper stream handling, hooks appear to "fail silently" on success
+- Users (and Claude) won't see confirmation that checks passed
+- This can lead to confusion about whether hooks are running
+
+### Best Practices
+1. **Always test hook output** by manually running: `echo '{}' | ./your-hook.sh`
+2. **Use stdout for success** - Remove `>&2` from success messages
+3. **Use stderr for errors** - Keep `>&2` for error messages
+4. **Be consistent** - All success to stdout, all errors to stderr
 
 ## Benefits of This Approach
 

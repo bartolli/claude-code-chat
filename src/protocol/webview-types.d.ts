@@ -3,12 +3,14 @@
  */
 
 declare global {
-    interface Window {
-        addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
-        removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
-    }
+  interface Window {
+    /** Add event listener for message events */
+    addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+    /** Remove event listener for message events */
+    removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+  }
 
-    const window: Window | undefined;
+  const window: Window | undefined;
 }
 
 export {};

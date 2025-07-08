@@ -3,33 +3,29 @@ import styled from 'styled-components';
 import { varWithFallback } from '../styles/theme';
 
 // Constants from GUI
-export const defaultBorderRadius = "5px";
-export const lightGray = "#999998";
-export const greenButtonColor = "#189e72";
+export const defaultBorderRadius = '5px';
+export const lightGray = '#999998';
+export const greenButtonColor = '#189e72';
 
 // Theme variable shortcuts from GUI
-export const vscInputBackground = varWithFallback("input-background");
-export const vscQuickInputBackground = varWithFallback("input-background");
-export const vscBackground = varWithFallback("background");
-export const vscForeground = varWithFallback("foreground");
-export const vscButtonBackground = varWithFallback("primary-background");
-export const vscButtonForeground = varWithFallback("primary-foreground");
-export const vscButtonHoverBackground = varWithFallback("primary-hover");
-export const vscErrorForeground = varWithFallback("error");
-export const vscEditorBackground = varWithFallback("editor-background");
-export const vscListActiveBackground = varWithFallback("list-active");
-export const vscFocusBorder = varWithFallback("border-focus");
-export const vscListActiveForeground = varWithFallback(
-  "list-active-foreground",
-);
-export const vscInputBorder = varWithFallback("input-border");
-export const vscInputBorderFocus = varWithFallback("border-focus");
-export const vscBadgeBackground = varWithFallback("badge-background");
-export const vscBadgeForeground = varWithFallback("badge-foreground");
-export const vscCommandCenterActiveBorder = varWithFallback(
-  "command-border-focus",
-);
-export const vscCommandCenterInactiveBorder = varWithFallback("command-border");
+export const vscInputBackground = varWithFallback('input-background');
+export const vscQuickInputBackground = varWithFallback('input-background');
+export const vscBackground = varWithFallback('background');
+export const vscForeground = varWithFallback('foreground');
+export const vscButtonBackground = varWithFallback('primary-background');
+export const vscButtonForeground = varWithFallback('primary-foreground');
+export const vscButtonHoverBackground = varWithFallback('primary-hover');
+export const vscErrorForeground = varWithFallback('error');
+export const vscEditorBackground = varWithFallback('editor-background');
+export const vscListActiveBackground = varWithFallback('list-active');
+export const vscFocusBorder = varWithFallback('border-focus');
+export const vscListActiveForeground = varWithFallback('list-active-foreground');
+export const vscInputBorder = varWithFallback('input-border');
+export const vscInputBorderFocus = varWithFallback('border-focus');
+export const vscBadgeBackground = varWithFallback('badge-background');
+export const vscBadgeForeground = varWithFallback('badge-foreground');
+export const vscCommandCenterActiveBorder = varWithFallback('command-border-focus');
+export const vscCommandCenterInactiveBorder = varWithFallback('command-border');
 
 // Button components from GUI
 export const Button = styled.button`
@@ -144,18 +140,21 @@ export const Input = styled.input`
 
 // Header button from GUI
 export const HeaderButton = styled.button<{
+  /** Whether to invert the button colors (dark button on light background vs light on dark) */
   inverted: boolean | undefined;
+  /** Custom background color to override default theme colors */
   backgroundColor?: string;
+  /** Custom hover background color to override default theme hover colors */
   hoverBackgroundColor?: string;
 }>`
   background-color: ${({ inverted, backgroundColor }) => {
-    return backgroundColor ?? (inverted ? vscForeground : "transparent");
+    return backgroundColor ?? (inverted ? vscForeground : 'transparent');
   }};
   color: ${({ inverted }) => (inverted ? vscBackground : vscForeground)};
 
   border: none;
   border-radius: ${defaultBorderRadius};
-  cursor: ${({ disabled }) => (disabled ? "default" : "pointer")};
+  cursor: ${({ disabled }) => (disabled ? 'default' : 'pointer')};
 
   &:focus {
     outline: none;
@@ -164,9 +163,9 @@ export const HeaderButton = styled.button<{
 
   &:hover {
     background-color: ${({ inverted, hoverBackgroundColor }) =>
-      typeof inverted === "undefined" || inverted
+      typeof inverted === 'undefined' || inverted
         ? (hoverBackgroundColor ?? vscInputBackground)
-        : "transparent"};
+        : 'transparent'};
   }
 
   display: flex;
@@ -211,7 +210,7 @@ export const CloseButton = styled.button`
 // Animated ellipsis from GUI
 export const AnimatedEllipsis = styled.span`
   &::after {
-    content: ".";
+    content: '.';
     animation: ellipsis 2.5s infinite;
     animation-fill-mode: forwards;
     animation-play-state: running;
@@ -223,16 +222,16 @@ export const AnimatedEllipsis = styled.span`
 
   @keyframes ellipsis {
     0% {
-      content: ".";
+      content: '.';
     }
     33% {
-      content: "..";
+      content: '..';
     }
     66% {
-      content: "...";
+      content: '...';
     }
     100% {
-      content: ".";
+      content: '.';
     }
   }
 `;
@@ -256,40 +255,40 @@ export const GridDiv = styled.div`
 // Additional utility components
 export const StyledCard = styled.div`
   background-color: ${vscInputBackground};
-  border: 1px solid ${varWithFallback("border")};
+  border: 1px solid ${varWithFallback('border')};
   border-radius: ${defaultBorderRadius};
   padding: 16px;
   margin-bottom: 8px;
 `;
 
 export const MutedText = styled.span`
-  color: ${varWithFallback("description")};
+  color: ${varWithFallback('description')};
   font-size: 12px;
 `;
 
 export const ErrorText = styled.span`
-  color: ${varWithFallback("error")};
+  color: ${varWithFallback('error')};
   font-size: 12px;
 `;
 
 export const SuccessText = styled.span`
-  color: ${varWithFallback("success")};
+  color: ${varWithFallback('success')};
   font-size: 12px;
 `;
 
 export const StyledLink = styled.a`
-  color: ${varWithFallback("link")};
+  color: ${varWithFallback('link')};
   text-decoration: none;
   cursor: pointer;
-  
+
   &:hover {
     text-decoration: underline;
   }
 `;
 
 export const CodeBlockContainer = styled.div`
-  background-color: ${varWithFallback("command-background")};
-  border: 1px solid ${varWithFallback("command-border")};
+  background-color: ${varWithFallback('command-background')};
+  border: 1px solid ${varWithFallback('command-border')};
   border-radius: ${defaultBorderRadius};
   padding: 12px;
   margin: 8px 0;
@@ -300,24 +299,29 @@ export const CodeBlockContainer = styled.div`
 
 export const HoverContainer = styled.div`
   transition: all 0.2s ease;
-  
+
   &:hover {
-    background-color: ${varWithFallback("list-hover")};
+    background-color: ${varWithFallback('list-hover')};
   }
 `;
 
-export const SelectableContainer = styled.div<{ isSelected?: boolean }>`
+export const SelectableContainer = styled.div<{
+  /** Whether the container is currently selected, shows active styling when true */
+  isSelected?: boolean;
+}>`
   padding: 8px;
   border-radius: ${defaultBorderRadius};
   cursor: pointer;
   transition: all 0.2s ease;
-  
-  ${props => props.isSelected && `
+
+  ${(props) =>
+    props.isSelected &&
+    `
     background-color: ${vscListActiveBackground};
     color: ${vscListActiveForeground};
   `}
-  
+
   &:hover {
-    background-color: ${varWithFallback("list-hover")};
+    background-color: ${varWithFallback('list-hover')};
   }
 `;

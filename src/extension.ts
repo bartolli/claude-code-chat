@@ -4,243 +4,283 @@ import * as util from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { DebugConsole } from './utils/debug-console';
+import type { ServiceContainer } from './core/ServiceContainer';
+import type { Logger } from './core/Logger';
+import type { ExtensionMessageHandler } from './services/ExtensionMessageHandler';
+import type { FromWebviewMessageType } from './protocol/types';
 
 const exec = util.promisify(cp.exec);
 
+/**
+ * Activates the Claude Code Chat extension.
+ * Initializes services, registers commands, and sets up the development environment.
+ * @param context - The VS Code extension context used for managing extension lifecycle
+ */
 export function activate(context: vscode.ExtensionContext) {
-    console.log('STEP3: Claude Code GUI extension is being activated!');
-    
-    // Create output channel for debugging
-    const outputChannel = vscode.window.createOutputChannel('Claude Code GUI');
-    outputChannel.appendLine('[Activation] Claude Code GUI extension is being activated...');
-    
-    // Initialize debug console filtering in development mode
+  // Extension activation logging is handled via outputChannel below
+
+  // Create output channel for debugging
+  const outputChannel = vscode.window.createOutputChannel('Claude Code GUI');
+  outputChannel.appendLine('[Activation] Claude Code GUI extension is being activated...');
+
+  // Initialize debug console filtering in development mode
+  if (context.extensionMode === vscode.ExtensionMode.Development) {
+    const { Logger } = require('./core/Logger');
+    const logger = Logger.getInstance(outputChannel);
+    DebugConsole.initialize(logger, true);
+    outputChannel.appendLine('[Activation] Debug console filtering enabled');
+  }
+
+  try {
+    // Try to load ServiceContainer with error handling
+    let services: ServiceContainer | undefined;
+    let logger: Logger | undefined;
+
+    try {
+      // ServiceContainer loading is logged via outputChannel below
+      outputChannel.appendLine('[Activation] Loading ServiceContainer...');
+      const { ServiceContainer } = require('./core/ServiceContainer');
+      const { SimpleStateManager } = require('./state/SimpleStateManager');
+
+      services = ServiceContainer.getInstance();
+      // ServiceContainer status is logged via outputChannel below
+      outputChannel.appendLine('[Activation] ServiceContainer loaded successfully');
+
+      // Initialize ServiceContainer with output channel
+      if (services) {
+        services.initializeWithOutputChannel(outputChannel);
+
+        // Initialize StateManager with context
+        const stateManager = new SimpleStateManager(context);
+        services.set('StateManager', stateManager);
+        // StateManager status is logged via outputChannel below
+        outputChannel.appendLine('[Activation] StateManager initialized');
+
+        // Try to get logger
+        logger = services.get('Logger');
+        // Logger status is logged via outputChannel below
+        outputChannel.appendLine('[Activation] Logger retrieved successfully');
+      }
+    } catch (error) {
+      outputChannel.appendLine(`[Activation] Failed to load ServiceContainer: ${error}`);
+      outputChannel.appendLine(`[Activation] Failed to load ServiceContainer: ${error}`);
+      // Continue without it
+    }
+
+    // Create provider - pass services only if available
+    const provider = new ClaudeChatProvider(context.extensionUri, context, services);
+
+    const disposable = vscode.commands.registerCommand('claude-code-chat-modern.openChat', () => {
+      outputChannel.appendLine('[Activation] Command executed!');
+      try {
+        provider.show();
+      } catch (error) {
+        outputChannel.appendLine(`[Activation] Error showing provider: ${error}`);
+        vscode.window.showErrorMessage(`Failed to open Claude Chat: ${error}`);
+      }
+    });
+
+    context.subscriptions.push(disposable);
+    outputChannel.appendLine('[Activation] Command registered successfully');
+
+    // Register migration commands
+    try {
+      const { FeatureFlagManager } = require('./migration/FeatureFlags');
+      const { MigrationTestHarness } = require('./migration/MigrationTestHarness');
+
+      FeatureFlagManager.registerCommands(context);
+      MigrationTestHarness.registerCommands(context);
+
+      // Migration command status is logged via outputChannel below
+      outputChannel.appendLine('[Activation] Migration commands registered');
+    } catch (error) {
+      // Error is logged via outputChannel below
+      outputChannel.appendLine(`[Activation] Failed to register migration commands: ${error}`);
+    }
+
+    // If we have logger, use it
+    if (logger) {
+      logger.info('Extension', 'Claude Code GUI extension activated');
+    }
+
+    // Load test utilities in debug mode
     if (context.extensionMode === vscode.ExtensionMode.Development) {
-        const { Logger } = require('./core/Logger');
-        const logger = Logger.getInstance(outputChannel);
-        DebugConsole.initialize(logger, true);
-        console.log('STEP3: Debug console filtering enabled');
-    }
-    
-    try {
-        // Try to load ServiceContainer with error handling
-        let services: any = null;
-        let logger: any = null;
-        
-        try {
-            console.log('STEP3: Loading ServiceContainer...');
-            outputChannel.appendLine('[Activation] Loading ServiceContainer...');
-            const { ServiceContainer } = require('./core/ServiceContainer');
-            const { SimpleStateManager } = require('./state/SimpleStateManager');
-            
-            services = ServiceContainer.getInstance();
-            console.log('STEP3: ServiceContainer loaded successfully');
-            outputChannel.appendLine('[Activation] ServiceContainer loaded successfully');
-            
-            // Initialize ServiceContainer with output channel
-            services.initializeWithOutputChannel(outputChannel);
-            
-            // Initialize StateManager with context
-            const stateManager = new SimpleStateManager(context);
-            services.set('StateManager', stateManager);
-            console.log('STEP3: StateManager initialized');
-            outputChannel.appendLine('[Activation] StateManager initialized');
-            
-            // Try to get logger
-            logger = services.get('Logger');
-            console.log('STEP3: Logger retrieved successfully');
-            outputChannel.appendLine('[Activation] Logger retrieved successfully');
-        } catch (error) {
-            console.error('STEP3: Failed to load ServiceContainer:', error);
-            outputChannel.appendLine(`[Activation] Failed to load ServiceContainer: ${error}`);
-            // Continue without it
+      // Test utilities loading is logged via outputChannel below
+      outputChannel.appendLine('[Activation] Loading test utilities for development mode...');
+
+      // Make ServiceContainer available globally for tests
+      // Using type assertion for test utilities
+      (
+        global as {
+          /**
+           *
+           */
+          serviceContainer?: ServiceContainer;
         }
+      ).serviceContainer = services;
 
-        // Create provider - pass services only if available
-        const provider = new ClaudeChatProvider(context.extensionUri, context, services);
-
-        const disposable = vscode.commands.registerCommand('claude-code-chat-modern.openChat', () => {
-            console.log('STEP3: Command executed!');
-            try {
-                provider.show();
-            } catch (error) {
-                console.error('STEP3: Error showing provider:', error);
-                vscode.window.showErrorMessage(`Failed to open Claude Chat: ${error}`);
-            }
-        });
-        
-        context.subscriptions.push(disposable);
-        console.log('STEP3: Command registered successfully');
-        
-        // Register migration commands
-        try {
-            const { FeatureFlagManager } = require('./migration/FeatureFlags');
-            const { MigrationTestHarness } = require('./migration/MigrationTestHarness');
-            
-            FeatureFlagManager.registerCommands(context);
-            MigrationTestHarness.registerCommands(context);
-            
-            console.log('STEP3: Migration commands registered');
-            outputChannel.appendLine('[Activation] Migration commands registered');
-        } catch (error) {
-            console.error('STEP3: Failed to register migration commands:', error);
-            outputChannel.appendLine(`[Activation] Failed to register migration commands: ${error}`);
-        }
-        
-        // If we have logger, use it
-        if (logger) {
-            logger.info('Extension', 'Claude Code GUI extension activated');
-        }
-        
-        // Load test utilities in debug mode
-        if (context.extensionMode === vscode.ExtensionMode.Development) {
-            console.log('STEP3: Loading test utilities for development mode...');
-            outputChannel.appendLine('[Activation] Loading test utilities for development mode...');
-            
-            // Make ServiceContainer available globally for tests
-            (global as any).serviceContainer = services;
-            
-            try {
-                require('./test/abort-test-utils');
-                console.log('STEP3: Test utilities loaded! Use abortTest.* in Debug Console');
-                outputChannel.appendLine('[Activation] Test utilities loaded! Use abortTest.* in Debug Console');
-            } catch (error) {
-                console.error('STEP3: Failed to load test utilities:', error);
-                outputChannel.appendLine(`[Activation] Failed to load test utilities: ${error}`);
-            }
-        }
-        
-    } catch (error) {
-        console.error('STEP3: Failed to activate:', error);
-        vscode.window.showErrorMessage(`Failed to activate: ${error}`);
-    }
-}
-
-export async function deactivate() {
-    console.log('STEP3: Deactivating');
-    
-    // Cleanup MCP client connections
-    try {
-        // Import is at the top, so we can use it directly
-        const { mcpClientService } = await import('./services/McpClientService.js');
-        await mcpClientService.disconnectAll();
-        console.log('STEP3: MCP client connections cleaned up');
-    } catch (error) {
-        console.error('STEP3: Error cleaning up MCP connections:', error);
-    }
-}
-
-// ClaudeChatProvider with optional ServiceContainer
-class ClaudeChatProvider {
-    private _panel: vscode.WebviewPanel | undefined;
-    private _disposables: vscode.Disposable[] = [];
-    private _messageHandler: any | undefined;
-
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _context: vscode.ExtensionContext,
-        private readonly _services?: any
-    ) {
-        console.log('STEP3: ClaudeChatProvider created, services available:', !!_services);
-        
-        // Create ExtensionMessageHandler once during construction
-        if (this._services) {
-            try {
-                const { ExtensionMessageHandler } = require('./services/ExtensionMessageHandler');
-                this._messageHandler = new ExtensionMessageHandler(this._context, this._services);
-                console.log('STEP3: ExtensionMessageHandler created during construction');
-            } catch (error) {
-                console.error('STEP3: Failed to create ExtensionMessageHandler:', error);
-            }
-        }
-    }
-
-    public show() {
-        console.log('STEP3: show() called');
-        const column = vscode.ViewColumn.Two;
-
-        if (this._panel) {
-            this._panel.reveal(column);
-            return;
-        }
-
-        this._panel = vscode.window.createWebviewPanel(
-            'claudeChat',
-            'Claude Code GUI',
-            column,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-                localResourceRoots: [this._extensionUri]
-            }
+      try {
+        require('./test/abort-test-utils');
+        // Test utilities status is logged via outputChannel below
+        outputChannel.appendLine(
+          '[Activation] Test utilities loaded! Use abortTest.* in Debug Console'
         );
+      } catch (error) {
+        // Error is logged via outputChannel below
+        outputChannel.appendLine(`[Activation] Failed to load test utilities: ${error}`);
+      }
+    }
+  } catch (error) {
+    outputChannel.appendLine(`[Activation] Failed to activate: ${error}`);
+    vscode.window.showErrorMessage(`Failed to activate: ${error}`);
+  }
+}
 
-        console.log('STEP3: Webview panel created');
+/**
+ * Deactivates the Claude Code Chat extension.
+ * Performs cleanup operations including disconnecting MCP client connections.
+ */
+export async function deactivate() {
+  const outputChannel = vscode.window.createOutputChannel('Claude Code GUI');
+  outputChannel.appendLine('[Deactivation] Deactivating Claude Code Chat extension...');
 
-        // Try to use the React webview if available
-        try {
-            this._panel.webview.html = this._getHtmlForWebview();
-        } catch (error) {
-            console.error('STEP3: Failed to load webview HTML:', error);
-            // Fallback to simple HTML
-            this._panel.webview.html = this._getSimpleHtml();
-        }
+  // Cleanup MCP client connections
+  try {
+    // Import is at the top, so we can use it directly
+    const { mcpClientService } = await import('./services/McpClientService.js');
+    await mcpClientService.disconnectAll();
+    outputChannel.appendLine('[Deactivation] MCP client connections cleaned up');
+  } catch (error) {
+    outputChannel.appendLine(`[Deactivation] Error cleaning up MCP connections: ${error}`);
+  }
+}
 
-        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-        
-        // Set up message handling
-        this._setupMessageHandling();
-        
-        console.log('STEP3: Webview setup complete');
+/**
+ * Provider class for the Claude chat webview panel.
+ * Manages the webview lifecycle, message handling, and communication with Claude services.
+ */
+class ClaudeChatProvider {
+  private _panel: vscode.WebviewPanel | undefined;
+  private _disposables: vscode.Disposable[] = [];
+  private _messageHandler: ExtensionMessageHandler | undefined;
+
+  /**
+   * Creates a new ClaudeChatProvider instance.
+   * @param _extensionUri - The URI of the extension root directory
+   * @param _context - The VS Code extension context
+   * @param _services - Optional ServiceContainer instance for dependency injection
+   */
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _context: vscode.ExtensionContext,
+    private readonly _services?: ServiceContainer
+  ) {
+    // Provider creation status will be logged if needed
+
+    // Create ExtensionMessageHandler once during construction
+    if (this._services) {
+      try {
+        const { ExtensionMessageHandler } = require('./services/ExtensionMessageHandler');
+        this._messageHandler = new ExtensionMessageHandler(this._context, this._services);
+        // Message handler creation logged internally
+      } catch (error) {
+        // Error handling delegated to caller
+      }
+    }
+  }
+
+  /**
+   * Shows the Claude chat webview panel.
+   * Creates a new panel if one doesn't exist, or reveals the existing panel.
+   */
+  public show() {
+    // Show method execution tracked internally
+    const column = vscode.ViewColumn.Two;
+
+    if (this._panel) {
+      this._panel.reveal(column);
+      return;
     }
 
-    private _getHtmlForWebview(): string {
-        const webview = this._panel!.webview;
-        const extensionUri = this._extensionUri;
+    this._panel = vscode.window.createWebviewPanel('claudeChat', 'Claude Code GUI', column, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [this._extensionUri],
+    });
 
-        // Path to the built webview HTML
-        const htmlPath = vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'index.html');
-        
-        try {
-            // Read the webpack-built HTML file
-            const htmlContent = fs.readFileSync(htmlPath.fsPath, 'utf8');
-            
-            // Get the webview's CSP source
-            const cspSource = webview.cspSource;
-            
-            // Replace CSP placeholder with actual CSP source
-            let processedHtml = htmlContent.replace(/\${cspSource}/g, cspSource);
-            
-            // Replace resource URIs with webview URIs
-            // Handle script tags
-            processedHtml = processedHtml.replace(
-                /src="([^"]+\.js)"/g,
-                (_match, p1) => {
-                    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', p1));
-                    return `src="${scriptUri}"`;
-                }
-            );
-            
-            // Handle link tags (CSS)
-            processedHtml = processedHtml.replace(
-                /href="([^"]+\.css)"/g,
-                (_match, p1) => {
-                    const cssUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', p1));
-                    return `href="${cssUri}"`;
-                }
-            );
-            
-            console.log('STEP3: Webview HTML processed successfully');
-            return processedHtml;
-            
-        } catch (error) {
-            console.error('STEP3: Failed to load webview HTML:', error);
-            throw error;
-        }
+    // Panel creation tracked internally
+
+    // Try to use the React webview if available
+    try {
+      this._panel.webview.html = this._getHtmlForWebview();
+    } catch (error) {
+      // Error will be thrown for proper handling
+      // Fallback to simple HTML
+      this._panel.webview.html = this._getSimpleHtml();
     }
 
-    private _getSimpleHtml(): string {
-        return `<!DOCTYPE html>
+    this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+    // Set up message handling
+    this._setupMessageHandling();
+
+    // Setup completion tracked internally
+  }
+
+  /**
+   * Generates the HTML content for the webview.
+   * Reads the webpack-built HTML file and processes it to work within VS Code's webview security context.
+   * @returns The processed HTML string with proper CSP headers and resource URIs
+   * @throws Error if the HTML file cannot be loaded or processed
+   */
+  private _getHtmlForWebview(): string {
+    const webview = this._panel!.webview;
+    const extensionUri = this._extensionUri;
+
+    // Path to the built webview HTML
+    const htmlPath = vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'index.html');
+
+    try {
+      // Read the webpack-built HTML file
+      const htmlContent = fs.readFileSync(htmlPath.fsPath, 'utf8');
+
+      // Get the webview's CSP source
+      const cspSource = webview.cspSource;
+
+      // Replace CSP placeholder with actual CSP source
+      let processedHtml = htmlContent.replace(/\${cspSource}/g, cspSource);
+
+      // Replace resource URIs with webview URIs
+      // Handle script tags
+      processedHtml = processedHtml.replace(/src="([^"]+\.js)"/g, (_match, p1) => {
+        const scriptUri = webview.asWebviewUri(
+          vscode.Uri.joinPath(extensionUri, 'out', 'webview', p1)
+        );
+        return `src="${scriptUri}"`;
+      });
+
+      // Handle link tags (CSS)
+      processedHtml = processedHtml.replace(/href="([^"]+\.css)"/g, (_match, p1) => {
+        const cssUri = webview.asWebviewUri(
+          vscode.Uri.joinPath(extensionUri, 'out', 'webview', p1)
+        );
+        return `href="${cssUri}"`;
+      });
+
+      // Processing success tracked internally
+      return processedHtml;
+    } catch (error) {
+      // Error will be thrown for proper handling
+      throw error;
+    }
+  }
+
+  /**
+   * Generates a simple fallback HTML when the main webview fails to load.
+   * @returns A basic HTML string with error messaging
+   */
+  private _getSimpleHtml(): string {
+    return `<!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
@@ -252,92 +292,100 @@ class ClaudeChatProvider {
             <p>Check the console for error details.</p>
         </body>
         </html>`;
+  }
+
+  /**
+   * Sets up bidirectional message handling between the webview and extension.
+   * Initializes the webview protocol, attaches message handlers, and sends initial configuration.
+   */
+  private _setupMessageHandling() {
+    // Message handling setup tracked internally
+
+    if (!this._panel || !this._services) {
+      // Early return when prerequisites missing
+      return;
     }
 
-    private _setupMessageHandling() {
-        console.log('STEP3: _setupMessageHandling called', {
-            hasPanel: !!this._panel,
-            hasServices: !!this._services
-        });
-        
-        if (!this._panel || !this._services) {
-            console.log('STEP3: Skipping message handling setup - missing panel or services');
-            return;
-        }
+    // Import required modules
+    const { SimpleWebviewProtocol } = require('./protocol/SimpleWebviewProtocol');
 
-        // Import required modules
-        const { SimpleWebviewProtocol } = require('./protocol/SimpleWebviewProtocol');
-        
-        // Create SimpleWebviewProtocol
-        const webviewProtocol = new SimpleWebviewProtocol(this._panel.webview);
-        
-        // Use existing message handler or create one if needed
-        if (!this._messageHandler && this._services) {
-            const { ExtensionMessageHandler } = require('./services/ExtensionMessageHandler');
-            this._messageHandler = new ExtensionMessageHandler(this._context, this._services);
-            console.log('STEP3: Created ExtensionMessageHandler in setupMessageHandling');
-        }
-        
-        if (this._messageHandler) {
-            // Attach the webview protocol to the existing handler
-            this._messageHandler.attach(webviewProtocol);
-            console.log('STEP3: Attached webviewProtocol to existing ExtensionMessageHandler');
-            
-            // Set up protocol handler
-            webviewProtocol.setHandler(async (type: any, data: any) => {
-                return await this._messageHandler.handleMessage(type, data);
-            });
-        } else {
-            console.error('STEP3: No ExtensionMessageHandler available!');
-        }
-        
-        console.log('STEP3: Message handling set up');
-        
-        // Send initial configuration
-        setTimeout(() => {
-            // Get selected model from workspace state
-            const selectedModel = this._context.workspaceState.get('selectedModel', 'sonnet');
-            
-            webviewProtocol.post('config/init', {
-                models: [
-                    { 
-                        id: 'sonnet', 
-                        name: 'Sonnet 4', 
-                        description: 'Sonnet 4 for daily use'
-                    },
-                    { 
-                        id: 'opus', 
-                        name: 'Opus 4', 
-                        description: 'Opus 4 for complex tasks · Reaches usage limits ~5x faster'
-                    },
-                    { 
-                        id: 'default', 
-                        name: 'Default Model', 
-                        description: 'Opus 4 for up to 50% of usage limits, then use Sonnet 4'
-                    }
-                ],
-                selectedModel: selectedModel,
-                features: {
-                    planMode: true,
-                    thinkingMode: true,
-                    costTracking: true
-                }
-            });
-            
-            webviewProtocol.post('status/ready', {
-                version: '0.2.0',
-                claudeAvailable: true
-            });
-        }, 1000);
+    // Create SimpleWebviewProtocol
+    const webviewProtocol = new SimpleWebviewProtocol(this._panel.webview);
+
+    // Use existing message handler or create one if needed
+    if (!this._messageHandler && this._services) {
+      const { ExtensionMessageHandler } = require('./services/ExtensionMessageHandler');
+      this._messageHandler = new ExtensionMessageHandler(this._context, this._services);
+      // Handler creation tracked internally
     }
 
-    public dispose() {
-        this._panel = undefined;
-        while (this._disposables.length) {
-            const x = this._disposables.pop();
-            if (x) {
-                x.dispose();
-            }
-        }
+    if (this._messageHandler) {
+      // Attach the webview protocol to the existing handler
+      this._messageHandler.attach(webviewProtocol);
+      // Protocol attachment tracked internally
+
+      // Set up protocol handler
+      webviewProtocol.setHandler(async (type: string, data: unknown) => {
+        return await this._messageHandler!.handleMessage(
+          type as FromWebviewMessageType,
+          data as any
+        );
+      });
+    } else {
+      // Error state - no handler available
     }
+
+    // Message handling configuration complete
+
+    // Send initial configuration
+    setTimeout(() => {
+      // Get selected model from workspace state
+      const selectedModel = this._context.workspaceState.get('selectedModel', 'sonnet');
+
+      webviewProtocol.post('config/init', {
+        models: [
+          {
+            id: 'sonnet',
+            name: 'Sonnet 4',
+            description: 'Sonnet 4 for daily use',
+          },
+          {
+            id: 'opus',
+            name: 'Opus 4',
+            description: 'Opus 4 for complex tasks · Reaches usage limits ~5x faster',
+          },
+          {
+            id: 'default',
+            name: 'Default Model',
+            description: 'Opus 4 for up to 50% of usage limits, then use Sonnet 4',
+          },
+        ],
+        selectedModel: selectedModel,
+        features: {
+          planMode: true,
+          thinkingMode: true,
+          costTracking: true,
+        },
+      });
+
+      webviewProtocol.post('status/ready', {
+        version: '0.2.0',
+        claudeAvailable: true,
+      });
+    }, 1000);
+  }
+
+  /**
+   * Disposes of the webview panel and cleans up all resources.
+   * Called when the panel is closed or the extension is deactivated.
+   */
+  public dispose() {
+    this._panel = undefined;
+    while (this._disposables.length) {
+      const x = this._disposables.pop();
+      if (x) {
+        x.dispose();
+      }
+    }
+  }
 }

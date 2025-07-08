@@ -7,21 +7,34 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { resetAllState } from '../actions';
 
 export interface McpServerInfo {
+  /** Server name/identifier */
   name: string;
+  /** Current connection status of the server */
   status: 'connected' | 'disconnected' | 'error';
+  /** Whether this server is enabled */
   enabled: boolean;
+  /** Number of tools provided by this server */
   toolCount?: number;
+  /** Number of prompts provided by this server */
   promptCount?: number;
+  /** Command to start the server */
   command?: string;
+  /** Command line arguments for the server */
   args?: string[];
+  /** Environment variables for the server process */
   env?: Record<string, string>;
+  /** Configuration scope (user, project, or local) */
   scope?: 'user' | 'project' | 'local';
 }
 
 export interface McpState {
+  /** List of configured MCP servers */
   servers: McpServerInfo[];
+  /** Total count of tools across all enabled servers */
   totalToolCount: number;
+  /** Whether MCP data is currently being loaded */
   isLoading: boolean;
+  /** Timestamp of last update to MCP state */
   lastUpdated?: number;
 }
 
@@ -29,7 +42,7 @@ const initialState: McpState = {
   servers: [],
   totalToolCount: 0,
   isLoading: false,
-  lastUpdated: undefined
+  lastUpdated: undefined,
 };
 
 const mcpSlice = createSlice({
@@ -40,46 +53,73 @@ const mcpSlice = createSlice({
       state.servers = action.payload;
       state.lastUpdated = Date.now();
       // Calculate total tool count
-      state.totalToolCount = action.payload.reduce((sum, server) => 
-        sum + (server.toolCount || 0), 0
+      state.totalToolCount = action.payload.reduce(
+        (sum, server) => sum + (server.toolCount || 0),
+        0
       );
     },
-    
-    updateServerStatus: (state, action: PayloadAction<{ name: string; status: McpServerInfo['status'] }>) => {
-      const server = state.servers.find(s => s.name === action.payload.name);
+
+    /**
+     * Update the connection status of a specific server
+     * @param state - The MCP state
+     * @param action - Action containing server name and new status
+     */
+    updateServerStatus: (
+      state,
+      action: PayloadAction<{
+        /** Name of the server to update */
+        name: string;
+        /** New connection status */
+        status: McpServerInfo['status'];
+      }>
+    ) => {
+      const server = state.servers.find((s) => s.name === action.payload.name);
       if (server) {
         server.status = action.payload.status;
         state.lastUpdated = Date.now();
       }
     },
-    
-    updateServerToolCount: (state, action: PayloadAction<{ name: string; toolCount: number; promptCount?: number }>) => {
-      const server = state.servers.find(s => s.name === action.payload.name);
+
+    /**
+     * Update the tool and prompt counts for a specific server
+     * @param state - The MCP state
+     * @param action - Action containing server name and updated counts
+     */
+    updateServerToolCount: (
+      state,
+      action: PayloadAction<{
+        /** Name of the server to update */
+        name: string;
+        /** Updated tool count */
+        toolCount: number;
+        /** Updated prompt count (optional) */
+        promptCount?: number;
+      }>
+    ) => {
+      const server = state.servers.find((s) => s.name === action.payload.name);
       if (server) {
         server.toolCount = action.payload.toolCount;
         if (action.payload.promptCount !== undefined) {
           server.promptCount = action.payload.promptCount;
         }
         // Recalculate total
-        state.totalToolCount = state.servers.reduce((sum, s) => 
-          sum + (s.toolCount || 0), 0
-        );
+        state.totalToolCount = state.servers.reduce((sum, s) => sum + (s.toolCount || 0), 0);
         state.lastUpdated = Date.now();
       }
     },
-    
+
     setMcpLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;
     },
-    
+
     addMcpServer: (state, action: PayloadAction<McpServerInfo>) => {
       state.servers.push(action.payload);
       state.totalToolCount += action.payload.toolCount || 0;
       state.lastUpdated = Date.now();
     },
-    
+
     removeMcpServer: (state, action: PayloadAction<string>) => {
-      const index = state.servers.findIndex(s => s.name === action.payload);
+      const index = state.servers.findIndex((s) => s.name === action.payload);
       if (index !== -1) {
         const server = state.servers[index];
         state.totalToolCount -= server.toolCount || 0;
@@ -87,31 +127,31 @@ const mcpSlice = createSlice({
         state.lastUpdated = Date.now();
       }
     },
-    
+
     updateConnectedServers: (state, action: PayloadAction<McpServerInfo[]>) => {
       // If we have no servers yet, just set them directly
       if (state.servers.length === 0) {
         state.servers = action.payload;
         state.totalToolCount = action.payload
-          .filter(s => s.enabled)
+          .filter((s) => s.enabled)
           .reduce((sum, server) => sum + (server.toolCount || 0), 0);
         state.lastUpdated = Date.now();
         return;
       }
-      
+
       // When Claude connects, update status of servers
       // Keep enabled status and pre-fetched counts
-      state.servers.forEach(server => {
+      state.servers.forEach((server) => {
         // Only update enabled servers
         if (server.enabled) {
           server.status = 'disconnected';
           // Don't reset counts - preserve pre-fetched data
         }
       });
-      
+
       // Update connected servers with their info
-      action.payload.forEach(connectedServer => {
-        const server = state.servers.find(s => s.name === connectedServer.name);
+      action.payload.forEach((connectedServer) => {
+        const server = state.servers.find((s) => s.name === connectedServer.name);
         if (server && server.enabled) {
           server.status = connectedServer.status;
           // Only update counts if Claude provides them (non-zero)
@@ -124,17 +164,17 @@ const mcpSlice = createSlice({
           }
         }
       });
-      
+
       // Recalculate total tool count (only from enabled servers)
       state.totalToolCount = state.servers
-        .filter(s => s.enabled)
+        .filter((s) => s.enabled)
         .reduce((sum, server) => sum + (server.toolCount || 0), 0);
       state.lastUpdated = Date.now();
-    }
+    },
   },
   extraReducers: (builder) => {
     builder.addCase(resetAllState, () => initialState);
-  }
+  },
 });
 
 export const {
@@ -144,15 +184,67 @@ export const {
   setMcpLoading,
   addMcpServer,
   removeMcpServer,
-  updateConnectedServers
+  updateConnectedServers,
 } = mcpSlice.actions;
 
 // Selectors
-export const selectMcpState = (state: { mcp: McpState }) => state.mcp;
-export const selectMcpServers = (state: { mcp: McpState }) => state.mcp.servers;
-export const selectMcpTotalToolCount = (state: { mcp: McpState }) => state.mcp.totalToolCount;
-export const selectMcpIsLoading = (state: { mcp: McpState }) => state.mcp.isLoading;
-export const selectMcpServerByName = (name: string) => (state: { mcp: McpState }) => 
-  state.mcp.servers.find(s => s.name === name);
+/**
+ * Select the complete MCP state
+ * @param state - The Redux state object
+ * @param state.mcp - The MCP slice of the state
+ * @returns The complete MCP state
+ */
+export const selectMcpState = (state: {
+  /** The MCP slice of the state */
+  mcp: McpState;
+}) => state.mcp;
+/**
+ * Select all configured MCP servers
+ * @param state - The Redux state object
+ * @param state.mcp - The MCP slice of the state
+ * @returns Array of MCP server configurations
+ */
+export const selectMcpServers = (state: {
+  /** The MCP slice of the state */
+  mcp: McpState;
+}) => state.mcp.servers;
+/**
+ * Select the total tool count across all servers
+ * @param state - The Redux state object
+ * @param state.mcp - The MCP slice of the state
+ * @returns Total number of tools across all enabled servers
+ */
+export const selectMcpTotalToolCount = (state: {
+  /** The MCP slice of the state */
+  mcp: McpState;
+}) => state.mcp.totalToolCount;
+/**
+ * Select whether MCP data is loading
+ * @param state - The Redux state object
+ * @param state.mcp - The MCP slice of the state
+ * @returns Whether MCP data is currently loading
+ */
+export const selectMcpIsLoading = (state: {
+  /** The MCP slice of the state */
+  mcp: McpState;
+}) => state.mcp.isLoading;
+/**
+ * Select a specific MCP server by name
+ * @param name - The name of the server to find
+ * @returns Selector function that returns the server or undefined
+ */
+export const selectMcpServerByName =
+  (name: string) =>
+  /**
+   * Selector function to find an MCP server by name
+   * @param state - The Redux state object
+   * @param state.mcp - The MCP slice of the state
+   * @returns The MCP server info or undefined
+   */
+  (state: {
+    /** The MCP slice of the state */
+    mcp: McpState;
+  }) =>
+    state.mcp.servers.find((s) => s.name === name);
 
 export default mcpSlice.reducer;

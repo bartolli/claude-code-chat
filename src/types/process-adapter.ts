@@ -18,8 +18,8 @@ export class ClaudeProcessAdapter {
   public exitCode: number | null = null;
 
   /**
-   *
-   * @param claudeProcess
+   * Creates an adapter that wraps a ClaudeProcess to provide ChildProcess-compatible interface
+   * @param claudeProcess The ClaudeProcess instance to adapt
    */
   constructor(private claudeProcess: ClaudeProcess) {
     this.stdin = claudeProcess.stdin;
@@ -29,8 +29,9 @@ export class ClaudeProcessAdapter {
   }
 
   /**
-   *
-   * @param signal
+   * Terminates the process with the specified signal
+   * @param signal Optional signal to send to the process
+   * @returns True if the kill signal was sent successfully
    */
   kill(signal?: NodeJS.Signals): boolean {
     this.killed = true;
@@ -38,9 +39,10 @@ export class ClaudeProcessAdapter {
   }
 
   /**
-   *
-   * @param event
-   * @param listener
+   * Registers an event listener for process events
+   * @param event The event name to listen for
+   * @param listener The callback function to execute when the event occurs
+   * @returns This adapter instance for method chaining
    */
   on(event: string, listener: (...args: any[]) => void): this {
     this.claudeProcess.on(event, listener);

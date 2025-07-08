@@ -60,6 +60,7 @@ Modified files trigger their corresponding tests automatically:
 /project:migration-next <task>    # Execute next migration task safely
 /project:migration-check          # Verify migration safety (and FIX issues!)
 /project:test-migration <scenario># Run specific migration test scenarios
+/project:check                    # Find and FIX all quality issues (spawns agents!)
 
 # Git Management
 /project:checkpoint               # Analyze changes and create smart commit

@@ -13,8 +13,11 @@ import { ChunkedJSONParser } from './ChunkedJSONParser';
 import { ProgressiveUIUpdater } from './ProgressiveUIUpdater';
 import { WebviewProtocol } from '../protocol/WebviewProtocol';
 
+/**
+ * Singleton service container that manages all application services
+ */
 export class ServiceContainer {
-  private static instance: ServiceContainer;
+  private static instance: ServiceContainer | undefined;
   private static readonly logger = getLogger();
 
   public readonly processManager: ClaudeProcessManager;
@@ -27,9 +30,12 @@ export class ServiceContainer {
   public readonly uiUpdater: ProgressiveUIUpdater;
   public readonly webviewProtocol: WebviewProtocol;
 
+  /**
+   * Private constructor to enforce singleton pattern
+   */
   private constructor() {
     ServiceContainer.logger.info('ServiceContainer', 'Initializing services');
-    
+
     this.processManager = new ClaudeProcessManager();
     this.fileService = new FileService();
     this.gitService = new GitService();
@@ -39,12 +45,13 @@ export class ServiceContainer {
     this.jsonParser = new ChunkedJSONParser(ServiceContainer.logger);
     this.uiUpdater = new ProgressiveUIUpdater(ServiceContainer.logger);
     this.webviewProtocol = new WebviewProtocol(ServiceContainer.logger);
-    
+
     ServiceContainer.logger.info('ServiceContainer', 'All services initialized');
   }
 
   /**
    * Get the singleton instance
+   * @returns The ServiceContainer singleton instance
    */
   public static getInstance(): ServiceContainer {
     if (!ServiceContainer.instance) {
@@ -58,15 +65,15 @@ export class ServiceContainer {
    */
   public dispose(): void {
     ServiceContainer.logger.info('ServiceContainer', 'Disposing services');
-    
+
     // Terminate all Claude processes
-    this.processManager.terminateAll().catch(error => {
+    this.processManager.terminateAll().catch((error) => {
       ServiceContainer.logger.error('ServiceContainer', 'Error terminating processes', error);
     });
-    
+
     // Dispose config service
     this.configService.dispose();
-    
+
     ServiceContainer.logger.info('ServiceContainer', 'Services disposed');
   }
 
@@ -76,7 +83,7 @@ export class ServiceContainer {
   public static reset(): void {
     if (ServiceContainer.instance) {
       ServiceContainer.instance.dispose();
-      ServiceContainer.instance = undefined as any;
+      ServiceContainer.instance = undefined;
     }
   }
 }

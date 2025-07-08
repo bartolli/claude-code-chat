@@ -34,10 +34,7 @@
       "Bash(npx eslint:*)",
       "Bash(.claude/hooks/smart-quality-check.sh:*)",
       "Bash(npx mocha:*)",
-      "Bash(tree:*)",
-      "Bash(.claude/hooks/single-file-quality-check.sh:*)",
-      "Bash(./.claude/hooks/single-file-quality-check.sh:*)",
-      "Bash(npx prettier:*)"
+      "Bash(tree:*)"
     ],
     "deny": []
   },
@@ -55,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/single-file-quality-check.sh"
+            "command": ".claude/hooks/smart-quality-check.sh"
           }
         ]
       }

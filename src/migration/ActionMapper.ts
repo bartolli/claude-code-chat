@@ -24,13 +24,9 @@ import { AnyAction, ActionCreator } from '@reduxjs/toolkit';
  * Webview action structure
  */
 export interface WebviewAction {
-  /**
-   *
-   */
+  /** Action type identifier */
   type: string;
-  /**
-   *
-   */
+  /** Optional action payload data */
   payload?: unknown;
 }
 
@@ -43,21 +39,13 @@ export type CustomHandler = (action: WebviewAction) => AnyAction | null;
  * Action mapping configuration
  */
 export interface ActionMappingConfig {
-  /**
-   *
-   */
+  /** Webview action type to map from */
   webviewAction: string;
-  /**
-   *
-   */
+  /** Redux action creator function */
   reduxActionCreator?: ActionCreator<AnyAction>;
-  /**
-   *
-   */
+  /** Custom handler function for complex actions */
   customHandler?: CustomHandler;
-  /**
-   *
-   */
+  /** Function to transform payload before mapping */
   payloadTransform?: (payload: unknown) => unknown;
 }
 
@@ -65,17 +53,11 @@ export interface ActionMappingConfig {
  * Validation result for action processing
  */
 export interface ActionValidationResult {
-  /**
-   *
-   */
+  /** Whether the action is valid */
   isValid: boolean;
-  /**
-   *
-   */
+  /** Error message if validation failed */
   error?: string;
-  /**
-   *
-   */
+  /** Payload after transformation */
   transformedPayload?: unknown;
 }
 
@@ -83,21 +65,13 @@ export interface ActionValidationResult {
  * Action processing result
  */
 export interface ActionProcessingResult {
-  /**
-   *
-   */
+  /** Whether processing was successful */
   success: boolean;
-  /**
-   *
-   */
+  /** The resulting Redux action */
   mappedAction?: AnyAction;
-  /**
-   *
-   */
+  /** Error message if processing failed */
   error?: string;
-  /**
-   *
-   */
+  /** Whether action was unmapped */
   unmapped?: boolean;
 }
 
@@ -110,23 +84,17 @@ export class ActionMapper {
   private outputChannel: vscode.OutputChannel;
   private featureFlags: FeatureFlagManager;
   private actionLog: Array<{
-    /**
-     *
-     */
+    /** When the action was processed */
     timestamp: Date;
-    /**
-     *
-     */
+    /** The original webview action */
     action: WebviewAction;
-    /**
-     *
-     */
+    /** Result of processing the action */
     result: ActionProcessingResult;
   }> = [];
 
   /**
-   *
-   * @param context
+   * Initialize ActionMapper with VS Code extension context
+   * @param context VS Code extension context for feature flags and output channel
    */
   constructor(context: vscode.ExtensionContext) {
     this.outputChannel = vscode.window.createOutputChannel('Claude Code - Action Mapper');
@@ -158,15 +126,9 @@ export class ActionMapper {
       payloadTransform: (payload) => {
         // Transform legacy token format to new format
         const tokenPayload = payload as {
-          /**
-           *
-           */
-          input?: number /**
-           *
-           */;
-          /**
-           *
-           */
+          /** Input token count */
+          input?: number;
+          /** Output token count */
           output?: number;
         };
         return {
@@ -180,9 +142,7 @@ export class ActionMapper {
       reduxActionCreator: setCurrentSession,
       payloadTransform: (payload) => {
         const resumePayload = payload as {
-          /**
-           *
-           */
+          /** Session identifier */
           sessionId?: string;
         };
         return resumePayload.sessionId || null;
@@ -194,9 +154,7 @@ export class ActionMapper {
       payloadTransform: (payload) => {
         // If payload has sessionId, use it; otherwise use current session
         const clearedPayload = payload as {
-          /**
-           *
-           */
+          /** Session identifier to clear */
           sessionId?: string;
         };
         return clearedPayload.sessionId || '';
@@ -207,9 +165,7 @@ export class ActionMapper {
       reduxActionCreator: setWebviewReady,
       payloadTransform: (payload) => {
         const readyPayload = payload as {
-          /**
-           *
-           */
+          /** Whether webview is ready */
           ready?: boolean;
         };
         return readyPayload.ready ?? true;
@@ -240,8 +196,8 @@ export class ActionMapper {
 
   /**
    * Add a mapping configuration
-   * @param actionType
-   * @param config
+   * @param actionType The webview action type to map
+   * @param config Configuration for the mapping
    */
   private addMapping(actionType: string, config: Omit<ActionMappingConfig, 'webviewAction'>): void {
     this.mappings.set(actionType, {
@@ -252,7 +208,8 @@ export class ActionMapper {
 
   /**
    * Map a webview action to Redux action
-   * @param action
+   * @param action The webview action to map
+   * @returns Result of action processing
    */
   mapAction(action: WebviewAction): ActionProcessingResult {
     if (!this.featureFlags.isEnabled('enableActionMapping')) {
@@ -297,7 +254,7 @@ export class ActionMapper {
 
   /**
    * Handle unmapped action
-   * @param action
+   * @param action The unmapped webview action
    */
   private handleUnmappedAction(action: WebviewAction): void {
     if (!this.unmappedActions.has(action.type)) {
@@ -313,7 +270,8 @@ export class ActionMapper {
 
   /**
    * Custom handler for message append
-   * @param _action
+   * @param _action The webview action (unused)
+   * @returns Redux action or null if not handled
    */
   private handleMessageAppended(_action: WebviewAction): AnyAction | null {
     // This would need to be handled differently as it's appending to existing message
@@ -323,7 +281,8 @@ export class ActionMapper {
 
   /**
    * Custom handler for model selection
-   * @param _action
+   * @param _action The webview action (unused)
+   * @returns Redux action or null if not handled
    */
   private handleModelSelected(_action: WebviewAction): AnyAction | null {
     // Model selection affects config, not session state
@@ -333,7 +292,8 @@ export class ActionMapper {
 
   /**
    * Custom handler for error display
-   * @param _action
+   * @param _action The webview action (unused)
+   * @returns Redux action or null if not handled
    */
   private handleShowError(_action: WebviewAction): AnyAction | null {
     // Errors might need special UI handling
@@ -342,7 +302,8 @@ export class ActionMapper {
 
   /**
    * Custom handler for notifications
-   * @param _action
+   * @param _action The webview action (unused)
+   * @returns Redux action or null if not handled
    */
   private handleShowNotification(_action: WebviewAction): AnyAction | null {
     // Notifications might bypass Redux entirely
@@ -351,7 +312,8 @@ export class ActionMapper {
 
   /**
    * Custom handler for stream messages
-   * @param _action
+   * @param _action The webview action (unused)
+   * @returns Redux action or null if not handled
    */
   private handleStreamMessage(_action: WebviewAction): AnyAction | null {
     // Stream messages need complex processing
@@ -360,8 +322,8 @@ export class ActionMapper {
 
   /**
    * Log action for debugging
-   * @param action
-   * @param result
+   * @param action The webview action that was processed
+   * @param result The result of processing the action
    */
   private logAction(action: WebviewAction, result: ActionProcessingResult): void {
     const logEntry = {
@@ -388,7 +350,8 @@ export class ActionMapper {
 
   /**
    * Validate action payload
-   * @param action
+   * @param action The webview action to validate
+   * @returns Validation result with transformed payload if valid
    */
   validateAction(action: WebviewAction): ActionValidationResult {
     if (!action.type) {
@@ -417,6 +380,7 @@ export class ActionMapper {
 
   /**
    * Get action mapping statistics
+   * @returns Statistics about action processing
    */
   getStatistics(): ActionMapperStats {
     const totalActions = this.actionLog.length;
@@ -440,6 +404,7 @@ export class ActionMapper {
 
   /**
    * Export action log for analysis
+   * @returns JSON string with action log data
    */
   exportActionLog(): string {
     const stats = this.getStatistics();
@@ -497,17 +462,11 @@ export interface ActionMapperStats {
    *
    */
   recentActions: Array<{
-    /**
-     *
-     */
+    /** Action type */
     type: string;
-    /**
-     *
-     */
+    /** Whether action was successful */
     success: boolean;
-    /**
-     *
-     */
+    /** When action was processed */
     timestamp: Date;
   }>;
 }
@@ -519,15 +478,9 @@ export const PayloadValidators = {
   isTokenPayload: (
     payload: unknown
   ): payload is {
-    /**
-     *
-     */
-    input?: number /**
-     *
-     */;
-    /**
-     *
-     */
+    /** Input token count */
+    input?: number;
+    /** Output token count */
     output?: number;
   } => {
     if (typeof payload !== 'object' || payload === null) {
@@ -543,9 +496,7 @@ export const PayloadValidators = {
   isSessionPayload: (
     payload: unknown
   ): payload is {
-    /**
-     *
-     */
+    /** Session identifier */
     sessionId?: string;
   } => {
     if (typeof payload !== 'object' || payload === null) {
@@ -558,9 +509,7 @@ export const PayloadValidators = {
   isReadyPayload: (
     payload: unknown
   ): payload is {
-    /**
-     *
-     */
+    /** Whether component is ready */
     ready?: boolean;
   } => {
     if (typeof payload !== 'object' || payload === null) {

@@ -6,60 +6,60 @@ import { getLogger } from './Logger';
 
 export interface ErrorOptions {
   /**
-   *
+   * Error category for grouping and handling similar errors
    */
   category: string;
   /**
-   *
+   * Whether the operation can be retried after failure
    */
   retryable?: boolean;
   /**
-   *
+   * Maximum number of retry attempts
    */
   retryCount?: number;
   /**
-   *
+   * Base delay in milliseconds between retry attempts
    */
   retryDelay?: number;
   /**
-   *
+   * Fallback function to execute if operation fails
    */
   fallback?: () => unknown;
   /**
-   *
+   * Callback function invoked when an error occurs
    */
   onError?: (error: Error) => void;
 }
 
 export interface ErrorContext {
   /**
-   *
+   * Error code for identifying specific error types
    */
   code: string;
   /**
-   *
+   * Human-readable error message
    */
   message: string;
   /**
-   *
+   * Error category for grouping similar errors
    */
   category: string;
   /**
-   *
+   * The original error that was caught
    */
   originalError: Error;
   /**
-   *
+   * Whether the error condition can be retried
    */
   retryable: boolean;
   /**
-   *
+   * Number of retry attempts made before failure
    */
   retryCount: number;
 }
 
 /**
- *
+ * Custom error class for application-specific errors with additional context
  */
 export class ApplicationError extends Error {
   public readonly code: string;
@@ -68,12 +68,12 @@ export class ApplicationError extends Error {
   public readonly context?: unknown;
 
   /**
-   *
-   * @param message
-   * @param code
-   * @param category
-   * @param retryable
-   * @param context
+   * Creates a new ApplicationError instance
+   * @param message - Human-readable error message
+   * @param code - Error code for identifying the error type
+   * @param category - Category for grouping similar errors
+   * @param retryable - Whether the error condition can be retried
+   * @param context - Additional context data about the error
    */
   constructor(
     message: string,
@@ -92,12 +92,12 @@ export class ApplicationError extends Error {
 }
 
 /**
- *
+ * Error thrown when an operation is aborted by the user
  */
 export class AbortError extends ApplicationError {
   /**
-   *
-   * @param message
+   * Creates a new AbortError instance
+   * @param message - Error message describing the abort reason
    */
   constructor(message = 'Operation aborted by user') {
     super(message, ErrorCodes.USER_ABORTED, 'Abort', false);
@@ -106,15 +106,16 @@ export class AbortError extends ApplicationError {
 }
 
 /**
- *
+ * Utility class for handling errors with retry logic and fallback mechanisms
  */
 export class ErrorBoundary {
   private static readonly logger = getLogger();
 
   /**
-   *
-   * @param operation
-   * @param options
+   * Executes an async operation with error handling, retry logic, and fallback support
+   * @param operation - The async operation to execute
+   * @param options - Error handling options including retry and fallback configuration
+   * @returns The result of the operation or fallback
    */
   public static async execute<T>(operation: () => Promise<T>, options: ErrorOptions): Promise<T> {
     const {
@@ -191,9 +192,10 @@ export class ErrorBoundary {
   }
 
   /**
-   *
-   * @param fn
-   * @param options
+   * Wraps a function with automatic error handling
+   * @param fn - The function to wrap
+   * @param options - Error handling options
+   * @returns The wrapped function with error handling
    */
   public static wrap<T extends (...args: any[]) => any>(fn: T, options: ErrorOptions): T {
     return (async (...args: Parameters<T>) => {
@@ -202,8 +204,9 @@ export class ErrorBoundary {
   }
 
   /**
-   *
-   * @param ms
+   * Creates a promise that resolves after a specified delay
+   * @param ms - Delay in milliseconds
+   * @returns Promise that resolves after the delay
    */
   private static delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

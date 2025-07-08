@@ -11,29 +11,29 @@ import { ChunkedJSONParser } from '../services/ChunkedJSONParser';
 
 type ServiceMap = {
   /**
-   *
+   * Central logging service
    */
   Logger: Logger;
   /**
-   *
+   * Manages Claude CLI process lifecycle
    */
   ClaudeProcessManager: ClaudeProcessManager;
   /**
-   *
+   * Processes streaming responses from Claude
    */
   StreamProcessor: StreamProcessor;
   /**
-   *
+   * Manages application state
    */
   StateManager: SimpleStateManager;
   /**
-   *
+   * Parses chunked JSON responses
    */
   ChunkedJSONParser: ChunkedJSONParser;
 };
 
 /**
- *
+ * Singleton container for managing application services and dependencies
  */
 export class ServiceContainer {
   private static instance: ServiceContainer;
@@ -41,7 +41,7 @@ export class ServiceContainer {
   private logger!: Logger; // Will be initialized in initializeWithOutputChannel
 
   /**
-   *
+   * Private constructor to enforce singleton pattern
    */
   private constructor() {
     // Logger will be initialized later with output channel
@@ -49,8 +49,8 @@ export class ServiceContainer {
   }
 
   /**
-   *
-   * @param outputChannel
+   * Initializes the service container with VS Code output channel
+   * @param outputChannel - VS Code output channel for logging
    */
   public initializeWithOutputChannel(outputChannel: any): void {
     // Initialize core logger with output channel
@@ -63,7 +63,7 @@ export class ServiceContainer {
   }
 
   /**
-   *
+   * Initializes all core services
    */
   private initializeServices(): void {
     // Process management
@@ -79,8 +79,8 @@ export class ServiceContainer {
 
   /**
    * Set a service
-   * @param name
-   * @param service
+   * @param name - Service name identifier
+   * @param service - Service instance to register
    */
   public set(name: string, service: any): void {
     this.services.set(name, service);
@@ -91,12 +91,13 @@ export class ServiceContainer {
    */
   public get<K extends keyof ServiceMap>(serviceType: K): ServiceMap[K];
   /**
-   *
+   * Get a service by name
    */
   public get(serviceName: string): any;
   /**
-   *
-   * @param service
+   * Implementation of service retrieval
+   * @param service - Service type or name
+   * @returns The requested service instance
    */
   public get(service: any): any {
     if (typeof service === 'function' && service.name) {
@@ -109,8 +110,8 @@ export class ServiceContainer {
 
   /**
    * Register a service
-   * @param name
-   * @param service
+   * @param name - Service name identifier
+   * @param service - Service instance to register
    */
   public register<T>(name: string, service: T): void {
     this.services.set(name, service);
@@ -118,6 +119,7 @@ export class ServiceContainer {
 
   /**
    * Get the singleton instance
+   * @returns The ServiceContainer singleton
    */
   public static getInstance(): ServiceContainer {
     if (!ServiceContainer.instance) {

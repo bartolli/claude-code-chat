@@ -5,39 +5,55 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+/**
+ * Manages the creation and configuration of webview content for the Claude Code Chat extension.
+ * Provides utilities for generating secure HTML content with proper CSP policies and resource paths.
+ */
 export class WebviewManager {
-    private static getNonce() {
-        let text = '';
-        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        for (let i = 0; i < 32; i++) {
-            text += possible.charAt(Math.floor(Math.random() * possible.length));
-        }
-        return text;
+  /**
+   * Generates a cryptographically secure nonce for Content Security Policy.
+   * @returns A 32-character random string suitable for CSP nonce attribute
+   */
+  private static getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
+    return text;
+  }
 
-    public static getWebviewContent(
-        webview: vscode.Webview,
-        extensionUri: vscode.Uri,
-        isDevelopment: boolean = false
-    ): string {
-        // Get paths to resources
-        const scriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'webview.js')
-        );
-        const vendorUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'vendor.js')
-        );
-        const reactUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'react.js')
-        );
+  /**
+   * Generates the complete HTML content for the webview panel with React integration.
+   * Includes proper CSP headers, resource loading, and VS Code theming.
+   * @param webview - The VS Code webview instance to generate content for
+   * @param extensionUri - The URI of the extension's root directory
+   * @param isDevelopment - Whether the extension is running in development mode
+   * @returns Complete HTML string with embedded scripts and styles
+   */
+  public static getWebviewContent(
+    webview: vscode.Webview,
+    extensionUri: vscode.Uri,
+    isDevelopment: boolean = false
+  ): string {
+    // Get paths to resources
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'webview.js')
+    );
+    const vendorUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'vendor.js')
+    );
+    const reactUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'react.js')
+    );
 
-        // Generate nonce for Content Security Policy
-        const nonce = WebviewManager.getNonce();
+    // Generate nonce for Content Security Policy
+    const nonce = WebviewManager.getNonce();
 
-        // CSP source
-        const cspSource = webview.cspSource;
+    // CSP source
+    const cspSource = webview.cspSource;
 
-        return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -136,16 +152,21 @@ export class WebviewManager {
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
-    }
+  }
 
-    public static getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
-        return {
-            enableScripts: true,
-            localResourceRoots: [
-                vscode.Uri.joinPath(extensionUri, 'out', 'webview'),
-                vscode.Uri.joinPath(extensionUri, 'media'),
-                vscode.Uri.joinPath(extensionUri, 'gui', 'public', 'fonts')
-            ]
-        };
-    }
+  /**
+   * Creates webview options with proper security settings and resource access.
+   * @param extensionUri - The URI of the extension's root directory
+   * @returns Webview options configured for script execution and local resource access
+   */
+  public static getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
+    return {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(extensionUri, 'out', 'webview'),
+        vscode.Uri.joinPath(extensionUri, 'media'),
+        vscode.Uri.joinPath(extensionUri, 'gui', 'public', 'fonts'),
+      ],
+    };
+  }
 }

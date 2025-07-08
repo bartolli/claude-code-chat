@@ -6,38 +6,37 @@ import { ProgressiveUIUpdater } from '../services/ProgressiveUIUpdater';
 import { Logger } from '../core/Logger';
 import { ClaudeStreamMessage } from '../types/claude';
 
-// Mock logger
 /**
- *
+ * Mock logger implementation for testing stream processing without actual logging output
  */
 class MockLogger implements Partial<Logger> {
   /**
-   *
-   * @param _category
-   * @param _message
-   * @param _data
+   * Mock debug logging method that discards all log output for testing
+   * @param _category - Log category (unused in mock)
+   * @param _message - Log message (unused in mock)
+   * @param _data - Additional data to log (unused in mock)
    */
   debug(_category: string, _message: string, _data?: unknown): void {}
   /**
-   *
-   * @param _category
-   * @param _message
-   * @param _data
+   * Mock info logging method that discards all log output for testing
+   * @param _category - Log category (unused in mock)
+   * @param _message - Log message (unused in mock)
+   * @param _data - Additional data to log (unused in mock)
    */
   info(_category: string, _message: string, _data?: unknown): void {}
   /**
-   *
-   * @param _category
-   * @param _message
-   * @param _data
+   * Mock warning logging method that discards all log output for testing
+   * @param _category - Log category (unused in mock)
+   * @param _message - Log message (unused in mock)
+   * @param _data - Additional data to log (unused in mock)
    */
   warn(_category: string, _message: string, _data?: unknown): void {}
   /**
-   *
-   * @param _category
-   * @param _message
-   * @param _error
-   * @param _data
+   * Mock error logging method that discards all log output for testing
+   * @param _category - Log category (unused in mock)
+   * @param _message - Log message (unused in mock)
+   * @param _error - Error object to log (unused in mock)
+   * @param _data - Additional data to log (unused in mock)
    */
   error(_category: string, _message: string, _error?: Error, _data?: unknown): void {}
 }

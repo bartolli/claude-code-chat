@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 'use strict';
 /**
  * Abort functionality test utilities for VS Code Debug Console
@@ -12,11 +13,13 @@
  * > abortTest.startProcess()
  * > abortTest.abort()
  * > abortTest.status()
+ *
+ * NOTE: This file intentionally uses console.log for debug console output
  */
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.AbortTestUtils = void 0;
 /**
- *
+ * Test utilities for debugging abort functionality in VS Code
  */
 class AbortTestUtils {
   context = {};
@@ -143,6 +146,7 @@ class AbortTestUtils {
   }
   /**
    * Get the current AbortController
+   * @returns {AbortController|undefined} The current abort controller or undefined
    */
   getController() {
     return this.context.currentController;

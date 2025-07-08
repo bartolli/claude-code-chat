@@ -4,203 +4,232 @@ import * as vscode from 'vscode';
 import { Logger } from '../core/Logger';
 
 interface ApprovalRecord {
-    planHash: string;
-    status: 'pending' | 'approved' | 'rejected' | 'refine';
-    timestamp: number;
-    message?: string;
+  /** Unique hash identifier for the plan */
+  planHash: string;
+  /** Current approval status of the plan */
+  status: 'pending' | 'approved' | 'rejected' | 'refine';
+  /** Unix timestamp when the record was created/updated */
+  timestamp: number;
+  /** Optional message for rejections or refinements */
+  message?: string;
 }
 
 interface ApprovalState {
-    approvals: Record<string, ApprovalRecord>;
+  /** Map of plan hashes to their approval records */
+  approvals: Record<string, ApprovalRecord>;
 }
 
 /**
  * Service to manage plan approvals for the MCP server
  */
 export class PlanApprovalService {
-    private stateFilePath: string;
-    private logger: Logger;
-    private outputChannel: vscode.OutputChannel;
+  /** Path to the approval state file */
+  private stateFilePath: string;
+  /** Logger instance for debugging */
+  private logger: Logger;
+  /** VS Code output channel for plan approval logs */
+  private outputChannel: vscode.OutputChannel;
 
-    constructor(
-        private workspaceRoot: string,
-        logger: Logger,
-        outputChannel: vscode.OutputChannel
-    ) {
-        this.stateFilePath = path.join(workspaceRoot, '.claude-plan-approval.json');
-        this.logger = logger;
-        this.outputChannel = outputChannel;
+  /**
+   * Creates a new PlanApprovalService instance
+   * @param workspaceRoot - The root directory of the workspace
+   * @param logger - Logger instance for debugging
+   * @param outputChannel - VS Code output channel for logging
+   */
+  constructor(
+    private workspaceRoot: string,
+    logger: Logger,
+    outputChannel: vscode.OutputChannel
+  ) {
+    this.stateFilePath = path.join(workspaceRoot, '.claude-plan-approval.json');
+    this.logger = logger;
+    this.outputChannel = outputChannel;
+  }
+
+  /**
+   * Generate MCP configuration including the plan approval server
+   * @param existingServers - Optional existing MCP server configurations to include
+   * @returns The path to the generated MCP configuration file
+   */
+  async generateMcpConfig(existingServers?: any): Promise<string> {
+    const config = {
+      mcpServers: {
+        'plan-approval': {
+          command: 'node',
+          args: [path.join(__dirname, '..', 'mcp', 'plan-approval-server.js'), this.workspaceRoot],
+        },
+        // Include any existing MCP servers
+        ...(existingServers || {}),
+      },
+    };
+
+    const configPath = path.join(this.workspaceRoot, '.claude-code-mcp-temp.json');
+    await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+
+    this.outputChannel.appendLine(`[PlanApproval] Generated MCP config at: ${configPath}`);
+    return configPath;
+  }
+
+  /**
+   * Hash a plan for identification
+   * @param plan - The plan content to hash
+   * @returns A short hash string identifying the plan
+   */
+  private hashPlan(plan: string): string {
+    // Simple hash - in production use crypto.createHash('sha256')
+    return Buffer.from(plan).toString('base64').substring(0, 16);
+  }
+
+  /**
+   * Read the current approval state
+   * @returns The current approval state or empty state if file doesn't exist
+   */
+  private async readState(): Promise<ApprovalState> {
+    try {
+      const content = await fs.readFile(this.stateFilePath, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      return { approvals: {} };
+    }
+  }
+
+  /**
+   * Write the approval state
+   * @param state - The approval state to persist to disk
+   */
+  private async writeState(state: ApprovalState): Promise<void> {
+    await fs.writeFile(this.stateFilePath, JSON.stringify(state, null, 2));
+  }
+
+  /**
+   * Record that a plan is pending approval
+   * @param plan - The plan content to record
+   * @returns The hash identifier of the recorded plan
+   */
+  async recordPendingPlan(plan: string): Promise<string> {
+    const planHash = this.hashPlan(plan);
+    const state = await this.readState();
+
+    state.approvals[planHash] = {
+      planHash,
+      status: 'pending',
+      timestamp: Date.now(),
+    };
+
+    await this.writeState(state);
+    this.outputChannel.appendLine(`[PlanApproval] Recorded pending plan: ${planHash}`);
+
+    return planHash;
+  }
+
+  /**
+   * Approve a plan
+   * @param plan - The plan content to approve
+   */
+  async approvePlan(plan: string): Promise<void> {
+    const planHash = this.hashPlan(plan);
+    const state = await this.readState();
+
+    if (state.approvals[planHash]) {
+      state.approvals[planHash].status = 'approved';
+      state.approvals[planHash].timestamp = Date.now();
+      await this.writeState(state);
+
+      this.outputChannel.appendLine(`[PlanApproval] Approved plan: ${planHash}`);
+    } else {
+      // Create approval if it doesn't exist (shouldn't happen normally)
+      state.approvals[planHash] = {
+        planHash,
+        status: 'approved',
+        timestamp: Date.now(),
+      };
+      await this.writeState(state);
+
+      this.outputChannel.appendLine(`[PlanApproval] Created and approved plan: ${planHash}`);
+    }
+  }
+
+  /**
+   * Reject a plan
+   * @param plan - The plan content to reject
+   * @param message - Optional reason for rejection
+   */
+  async rejectPlan(plan: string, message?: string): Promise<void> {
+    const planHash = this.hashPlan(plan);
+    const state = await this.readState();
+
+    state.approvals[planHash] = {
+      planHash,
+      status: 'rejected',
+      timestamp: Date.now(),
+      message,
+    };
+
+    await this.writeState(state);
+    this.outputChannel.appendLine(`[PlanApproval] Rejected plan: ${planHash}`);
+  }
+
+  /**
+   * Mark a plan for refinement
+   * @param plan - The plan content to refine
+   * @param message - Optional refinement instructions or feedback
+   */
+  async refinePlan(plan: string, message?: string): Promise<void> {
+    const planHash = this.hashPlan(plan);
+    const state = await this.readState();
+
+    state.approvals[planHash] = {
+      planHash,
+      status: 'refine',
+      timestamp: Date.now(),
+      message: message || 'User requested refinement',
+    };
+
+    await this.writeState(state);
+    this.outputChannel.appendLine(`[PlanApproval] Marked plan for refinement: ${planHash}`);
+  }
+
+  /**
+   * Clean up old approvals (older than 1 hour)
+   */
+  async cleanupOldApprovals(): Promise<void> {
+    const state = await this.readState();
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+
+    let cleaned = 0;
+    for (const [hash, approval] of Object.entries(state.approvals)) {
+      if (approval.timestamp < oneHourAgo) {
+        delete state.approvals[hash];
+        cleaned++;
+      }
     }
 
-    /**
-     * Generate MCP configuration including the plan approval server
-     */
-    async generateMcpConfig(existingServers?: any): Promise<string> {
-        const config = {
-            mcpServers: {
-                'plan-approval': {
-                    command: 'node',
-                    args: [
-                        path.join(__dirname, '..', 'mcp', 'plan-approval-server.js'),
-                        this.workspaceRoot
-                    ]
-                },
-                // Include any existing MCP servers
-                ...(existingServers || {})
-            }
-        };
-
-        const configPath = path.join(this.workspaceRoot, '.claude-code-mcp-temp.json');
-        await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-        
-        this.outputChannel.appendLine(`[PlanApproval] Generated MCP config at: ${configPath}`);
-        return configPath;
+    if (cleaned > 0) {
+      await this.writeState(state);
+      this.outputChannel.appendLine(`[PlanApproval] Cleaned up ${cleaned} old approvals`);
     }
+  }
 
-    /**
-     * Hash a plan for identification
-     */
-    private hashPlan(plan: string): string {
-        // Simple hash - in production use crypto.createHash('sha256')
-        return Buffer.from(plan).toString('base64').substring(0, 16);
-    }
+  /**
+   * Get CLI arguments for plan mode with MCP
+   * @returns Array of CLI arguments for Claude to enable plan mode with MCP
+   */
+  async getPlanModeArgs(): Promise<string[]> {
+    // Clean up old approvals first
+    await this.cleanupOldApprovals();
 
-    /**
-     * Read the current approval state
-     */
-    private async readState(): Promise<ApprovalState> {
-        try {
-            const content = await fs.readFile(this.stateFilePath, 'utf-8');
-            return JSON.parse(content);
-        } catch {
-            return { approvals: {} };
-        }
-    }
+    // Generate MCP config
+    const mcpConfigPath = await this.generateMcpConfig();
 
-    /**
-     * Write the approval state
-     */
-    private async writeState(state: ApprovalState): Promise<void> {
-        await fs.writeFile(this.stateFilePath, JSON.stringify(state, null, 2));
-    }
-
-    /**
-     * Record that a plan is pending approval
-     */
-    async recordPendingPlan(plan: string): Promise<string> {
-        const planHash = this.hashPlan(plan);
-        const state = await this.readState();
-        
-        state.approvals[planHash] = {
-            planHash,
-            status: 'pending',
-            timestamp: Date.now()
-        };
-        
-        await this.writeState(state);
-        this.outputChannel.appendLine(`[PlanApproval] Recorded pending plan: ${planHash}`);
-        
-        return planHash;
-    }
-
-    /**
-     * Approve a plan
-     */
-    async approvePlan(plan: string): Promise<void> {
-        const planHash = this.hashPlan(plan);
-        const state = await this.readState();
-        
-        if (state.approvals[planHash]) {
-            state.approvals[planHash].status = 'approved';
-            state.approvals[planHash].timestamp = Date.now();
-            await this.writeState(state);
-            
-            this.outputChannel.appendLine(`[PlanApproval] Approved plan: ${planHash}`);
-        } else {
-            // Create approval if it doesn't exist (shouldn't happen normally)
-            state.approvals[planHash] = {
-                planHash,
-                status: 'approved',
-                timestamp: Date.now()
-            };
-            await this.writeState(state);
-            
-            this.outputChannel.appendLine(`[PlanApproval] Created and approved plan: ${planHash}`);
-        }
-    }
-
-    /**
-     * Reject a plan
-     */
-    async rejectPlan(plan: string, message?: string): Promise<void> {
-        const planHash = this.hashPlan(plan);
-        const state = await this.readState();
-        
-        state.approvals[planHash] = {
-            planHash,
-            status: 'rejected',
-            timestamp: Date.now(),
-            message
-        };
-        
-        await this.writeState(state);
-        this.outputChannel.appendLine(`[PlanApproval] Rejected plan: ${planHash}`);
-    }
-
-    /**
-     * Mark a plan for refinement
-     */
-    async refinePlan(plan: string, message?: string): Promise<void> {
-        const planHash = this.hashPlan(plan);
-        const state = await this.readState();
-        
-        state.approvals[planHash] = {
-            planHash,
-            status: 'refine',
-            timestamp: Date.now(),
-            message: message || 'User requested refinement'
-        };
-        
-        await this.writeState(state);
-        this.outputChannel.appendLine(`[PlanApproval] Marked plan for refinement: ${planHash}`);
-    }
-
-    /**
-     * Clean up old approvals (older than 1 hour)
-     */
-    async cleanupOldApprovals(): Promise<void> {
-        const state = await this.readState();
-        const oneHourAgo = Date.now() - (60 * 60 * 1000);
-        
-        let cleaned = 0;
-        for (const [hash, approval] of Object.entries(state.approvals)) {
-            if (approval.timestamp < oneHourAgo) {
-                delete state.approvals[hash];
-                cleaned++;
-            }
-        }
-        
-        if (cleaned > 0) {
-            await this.writeState(state);
-            this.outputChannel.appendLine(`[PlanApproval] Cleaned up ${cleaned} old approvals`);
-        }
-    }
-
-    /**
-     * Get CLI arguments for plan mode with MCP
-     */
-    async getPlanModeArgs(): Promise<string[]> {
-        // Clean up old approvals first
-        await this.cleanupOldApprovals();
-        
-        // Generate MCP config
-        const mcpConfigPath = await this.generateMcpConfig();
-        
-        return [
-            '--permission-mode', 'plan',
-            '--mcp-config', mcpConfigPath,
-            '--permission-prompt-tool', 'mcp__plan-approval__check_plan_approval',
-            '--allowedTools', 'exit_plan_mode,mcp__plan-approval__check_plan_approval'
-        ];
-    }
+    return [
+      '--permission-mode',
+      'plan',
+      '--mcp-config',
+      mcpConfigPath,
+      '--permission-prompt-tool',
+      'mcp__plan-approval__check_plan_approval',
+      '--allowedTools',
+      'exit_plan_mode,mcp__plan-approval__check_plan_approval',
+    ];
+  }
 }

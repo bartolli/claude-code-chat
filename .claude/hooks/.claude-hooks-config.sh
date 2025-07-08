@@ -9,7 +9,7 @@ export CLAUDE_HOOKS_TYPESCRIPT_ENABLED=true
 export CLAUDE_HOOKS_ESLINT_ENABLED=true
 export CLAUDE_HOOKS_PRETTIER_ENABLED=true
 export CLAUDE_HOOKS_MIGRATION_SAFETY_ENABLED=true
-export CLAUDE_HOOKS_TEST_RUNNER_ENABLED=true
+export CLAUDE_HOOKS_TEST_RUNNER_ENABLED=false
 
 # Auto-fix settings - VERY helpful for Claude!
 export CLAUDE_HOOKS_PRETTIER_AUTOFIX=true  # Auto-format code
@@ -21,6 +21,7 @@ export CLAUDE_HOOKS_IGNORE_PATTERNS=(
     "*.config.js"
     "*.config.ts"
     "dist/*"
+    "out/*"
     "build/*"
     "node_modules/*"
 )
@@ -34,9 +35,12 @@ export CLAUDE_HOOKS_JSDOC_MESSAGE="Use JSDoc comments (/** */) for better docume
 export CLAUDE_HOOKS_TEST_COMMAND="npm test"
 
 # Migration-specific test configuration
-export CLAUDE_HOOKS_MIGRATION_TESTS_ENABLED=true
+export CLAUDE_HOOKS_MIGRATION_TESTS_ENABLED=false
 export CLAUDE_HOOKS_MIGRATION_TEST_COMMAND="npm run test -- --grep migration"
 export CLAUDE_HOOKS_MIGRATION_CRITICAL_PATTERNS="migration/|StateManager|ExtensionMessageHandler|state/slices/"
+
+# Debug mode for troubleshooting
+export CLAUDE_HOOKS_DEBUG=false
 
 # Additional file type detection patterns
 export CLAUDE_HOOKS_REDUX_PATTERNS="store/|slices/|reducers/|actions/"

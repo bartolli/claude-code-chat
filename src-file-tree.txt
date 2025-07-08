@@ -1,0 +1,161 @@
+src/
+├── core
+│   ├── ErrorBoundary.ts
+│   ├── index.ts
+│   ├── Logger.ts
+│   ├── Result.ts
+│   └── ServiceContainer.ts
+├── hooks
+│   ├── plan-approval-hook.js
+│   └── plan-approval-hook.ts
+├── migration
+│   ├── ActionMapper.ts
+│   ├── FeatureFlags.ts
+│   ├── MigrationTestHarness.ts
+│   └── StateComparator.ts
+├── protocol
+│   ├── base.ts
+│   ├── IdeMessenger.ts
+│   ├── index.ts
+│   ├── ProtocolMigration.ts
+│   ├── SimpleWebviewProtocol.ts
+│   ├── types.ts
+│   └── WebviewProtocol.ts
+├── services
+│   ├── ChunkedJSONParser.ts
+│   ├── ClaudeProcessManager.ts
+│   ├── ConfigService.ts
+│   ├── ExtensionMessageHandler.ts
+│   ├── FileService.ts
+│   ├── GitService.ts
+│   ├── index.ts
+│   ├── McpClientService.ts
+│   ├── McpService.ts
+│   ├── PlanApprovalService.ts
+│   ├── ProgressiveUIUpdater.ts
+│   ├── ServiceContainer.ts
+│   ├── StreamIntegration.ts
+│   └── StreamProcessor.ts
+├── state
+│   ├── slices
+│   │   ├── claudeSlice.ts
+│   │   ├── configSlice.ts
+│   │   ├── mcpSlice.ts
+│   │   ├── processesSlice.ts
+│   │   ├── sessionSlice.ts
+│   │   └── uiSlice.ts
+│   ├── actions.ts
+│   ├── selectors.ts
+│   ├── SimpleStateManager.ts
+│   ├── StateManager.ts
+│   └── store.ts
+├── streaming
+├── test
+│   ├── migration
+│   │   ├── actionMapper.test.ts
+│   │   ├── messageFlow.integration.test.ts
+│   │   ├── messageTypes.documentation.ts
+│   │   ├── reduxActions.integration.test.ts
+│   │   └── reduxStore.integration.test.ts
+│   ├── state
+│   │   ├── slices
+│   │   │   ├── configSlice.test.ts
+│   │   │   ├── processesSlice.test.ts
+│   │   │   ├── sessionSlice.test.ts
+│   │   │   └── uiSlice.test.ts
+│   │   ├── StateManager.test.ts
+│   │   └── store.test.ts
+│   ├── abort-test-utils.test.js
+│   ├── extension.test.ts
+│   ├── phase1.test.ts
+│   ├── services.test.ts
+│   └── stream-processing.test.ts
+├── types
+│   ├── claude.ts
+│   ├── messages.ts
+│   ├── process-adapter.ts
+│   └── state.ts
+├── utils
+│   └── debug-console.ts
+├── webview
+│   ├── components
+│   │   ├── AnimatedGradientBorder
+│   │   │   └── index.tsx
+│   │   ├── ChatHeader
+│   │   │   └── index.tsx
+│   │   ├── ChatToolbar
+│   │   │   └── index.tsx
+│   │   ├── ContinueInputBox
+│   │   │   ├── GradientBorder.tsx
+│   │   │   ├── index.tsx
+│   │   │   └── Lump.tsx
+│   │   ├── InlineToolDisplay
+│   │   │   ├── index.tsx
+│   │   │   └── ToolChainContainer.tsx
+│   │   ├── IntegratedInputBox
+│   │   │   └── index.tsx
+│   │   ├── ModelSelector
+│   │   │   └── index.tsx
+│   │   ├── PermissionPrompt
+│   │   │   └── index.tsx
+│   │   ├── StepContainer
+│   │   │   ├── GradientBorder.tsx
+│   │   │   ├── index.tsx
+│   │   │   └── ResponseActions.tsx
+│   │   ├── StyledMarkdownPreview
+│   │   │   ├── index.tsx
+│   │   │   ├── rehypeHighlightPlugin.ts
+│   │   │   └── SyntaxHighlightedPre.tsx
+│   │   ├── ThinkingIndicator
+│   │   │   ├── index.tsx
+│   │   │   └── ThinkingStateMachine.tsx
+│   │   ├── TipTapEditor
+│   │   │   ├── index.tsx
+│   │   │   ├── InputToolbar.tsx
+│   │   │   ├── ModelSelector.tsx
+│   │   │   └── PlanModeToggle.tsx
+│   │   ├── ToolChainDisplay
+│   │   │   └── index.tsx
+│   │   ├── ToolTreeView
+│   │   │   └── index.tsx
+│   │   ├── ToolUseDisplay
+│   │   │   ├── index.tsx
+│   │   │   └── TodoListFormatter.tsx
+│   │   ├── WaitingIndicator
+│   │   │   └── index.tsx
+│   │   ├── AnimatedEllipsis.tsx
+│   │   ├── Button.tsx
+│   │   ├── Chat.tsx
+│   │   ├── DialogProvider.tsx
+│   │   ├── EmptyChatBody.tsx
+│   │   ├── ErrorBoundary.tsx
+│   │   ├── Footer.tsx
+│   │   ├── Icon.tsx
+│   │   ├── PlanApproval.tsx
+│   │   ├── SimpleErrorBoundary.tsx
+│   │   ├── simpleStyled.ts
+│   │   └── styled.ts
+│   ├── hooks
+│   │   └── useTextTruncation.tsx
+│   ├── styles
+│   │   ├── components
+│   │   │   ├── katex.css
+│   │   │   ├── Lump.css
+│   │   │   ├── markdown.css
+│   │   │   └── TipTapEditor.css
+│   │   ├── global.css
+│   │   └── theme.ts
+│   ├── util
+│   │   └── index.ts
+│   ├── utils
+│   │   └── toolHierarchy.ts
+│   ├── App.tsx
+│   ├── dev-app.tsx
+│   ├── dev-server.html
+│   ├── index.html
+│   ├── index.tsx
+│   ├── test-index.tsx
+│   └── WebviewManager.ts
+└── extension.ts
+
+38 directories, 121 files
