@@ -120,11 +120,12 @@ export function activate(context: vscode.ExtensionContext) {
       ).serviceContainer = services;
 
       try {
-        require('./test/abort-test-utils');
+        // TODO: Restore abort-test-utils when the file is available
+        // require('./test/abort-test-utils');
         // Test utilities status is logged via outputChannel below
-        outputChannel.appendLine(
-          '[Activation] Test utilities loaded! Use abortTest.* in Debug Console'
-        );
+        // outputChannel.appendLine(
+        //   '[Activation] Test utilities loaded! Use abortTest.* in Debug Console'
+        // );
       } catch (error) {
         // Error is logged via outputChannel below
         outputChannel.appendLine(`[Activation] Failed to load test utilities: ${error}`);
@@ -326,9 +327,11 @@ class ClaudeChatProvider {
 
       // Set up protocol handler
       webviewProtocol.setHandler(async (type: string, data: unknown) => {
+        // Type assertion is safe here as the protocol ensures correct typing
+        const messageType = type as FromWebviewMessageType;
         return await this._messageHandler!.handleMessage(
-          type as FromWebviewMessageType,
-          data as any
+          messageType,
+          data as Parameters<typeof this._messageHandler.handleMessage<typeof messageType>>[1]
         );
       });
     } else {

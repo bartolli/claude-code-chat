@@ -34,3 +34,4 @@ thinking_*.md
 
 # Reference documentation from other projects
 docs/reference/
+.DS_Store

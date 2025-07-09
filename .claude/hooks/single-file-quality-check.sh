@@ -331,6 +331,67 @@ check_common_issues() {
 }
 
 # ============================================================================
+# TEST SUGGESTIONS
+# ============================================================================
+
+suggest_related_tests() {
+    local file_path="$1"
+    local file_type="$2"
+    
+    # Only suggest for source files, not test files themselves
+    if [[ "$file_type" == "test" ]]; then
+        return 0
+    fi
+    
+    # Check if related test files exist
+    local base_name="${file_path%.*}"
+    local has_tests=false
+    local test_file=""
+    
+    for ext in "test.ts" "test.tsx" "spec.ts" "spec.tsx"; do
+        if [[ -f "${base_name}.${ext}" ]]; then
+            has_tests=true
+            test_file="${base_name}.${ext}"
+            break
+        fi
+    done
+    
+    # Also check in __tests__ directory
+    local dir_name=$(dirname "$file_path")
+    local file_name=$(basename "$file_path")
+    local base_file_name="${file_name%.*}"
+    
+    if [[ ! "$has_tests" == "true" ]]; then
+        for ext in "test.ts" "test.tsx" "spec.ts" "spec.tsx"; do
+            if [[ -f "${dir_name}/__tests__/${base_file_name}.${ext}" ]]; then
+                has_tests=true
+                test_file="${dir_name}/__tests__/${base_file_name}.${ext}"
+                break
+            fi
+        done
+    fi
+    
+    if [[ "$has_tests" == "true" ]]; then
+        log_warning "💡 Related test found: $(basename "$test_file")"
+        log_warning "   Run: /project:test-file $(basename "$file_path")"
+    fi
+    
+    # Special reminder for migration-critical files
+    if [[ "$file_path" =~ (ActionMapper|ExtensionMessageHandler|StateManager) ]]; then
+        log_warning "💡 Migration-critical file! Consider running:"
+        log_warning "   /project:test-migration"
+    elif [[ "$file_path" =~ /state/slices/ ]]; then
+        log_warning "💡 Redux state file! Consider running:"
+        log_warning "   /project:test-file redux-integration"
+    elif [[ "$file_path" =~ /migration/ ]]; then
+        log_warning "💡 Migration file! Consider running:"
+        log_warning "   /project:test-migration"
+    fi
+    
+    return 0
+}
+
+# ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
@@ -444,23 +505,27 @@ main() {
             check_eslint "$file_path"
             check_prettier "$file_path"
             check_common_issues "$file_path" "$file_type"
+            suggest_related_tests "$file_path" "$file_type"
             ;;
         "migration")
             check_eslint "$file_path"
             check_prettier "$file_path"
             check_migration_safety "$file_path"
             check_common_issues "$file_path" "$file_type"
+            suggest_related_tests "$file_path" "$file_type"
             ;;
         "migration-critical")
             check_eslint "$file_path"
             check_prettier "$file_path"
             check_migration_safety "$file_path"
             check_common_issues "$file_path" "$file_type"
+            suggest_related_tests "$file_path" "$file_type"
             ;;
         "redux")
             check_eslint "$file_path"
             check_prettier "$file_path"
             check_common_issues "$file_path" "$file_type"
+            suggest_related_tests "$file_path" "$file_type"
             ;;
     esac
     
