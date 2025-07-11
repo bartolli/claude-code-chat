@@ -4,6 +4,7 @@ import { ExtensionMessageHandler } from '../../services/ExtensionMessageHandler'
 import { SimpleStateManager } from '../../state/SimpleStateManager';
 import { ClaudeServiceInterface } from '../../interfaces/claude.interface';
 import { WebviewProtocol } from '../../protocols/WebviewProtocol';
+import { ServiceContainer } from '../../core/ServiceContainer';
 
 /**
  * Integration tests for current message flow
@@ -97,6 +98,30 @@ suite('Message Flow Integration Tests - Baseline', () => {
       isReady: () => true,
     } as any;
 
+    // Setup service container
+    const services = ServiceContainer.getInstance();
+    services.set('Logger', {
+      info: () => {},
+      error: () => {},
+      warning: () => {},
+      debug: () => {},
+    });
+    services.set('OutputChannel', {
+      appendLine: () => {},
+      append: () => {},
+      clear: () => {},
+      show: () => {},
+      hide: () => {},
+      dispose: () => {},
+    });
+    services.set('StateManager', stateManager);
+    services.set('WebviewProtocol', webviewProtocol);
+    services.set('ClaudeService', claudeService);
+
+    // Initialize the message handler
+    messageHandler = new ExtensionMessageHandler(context, services);
+    messageHandler.attach(webviewProtocol as any);
+
     // Clear captured messages before each test
     capturedMessages.length = 0;
   });
@@ -111,7 +136,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
     const userMessage = 'Hello Claude';
 
     // Simulate user sending a message
-    await messageHandler.handleChatMessage({ text: userMessage });
+    await messageHandler.handleMessage('chat/sendMessage', {
+      text: userMessage,
+      thinkingMode: false,
+      planMode: false,
+    });
 
     // Verify message flow
     const messageAddEvents = capturedMessages.filter((m) => m.type === 'message/add');
@@ -152,7 +181,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
       }
     };
 
-    await messageHandler.handleChatMessage({ text: 'Test with thinking' });
+    await messageHandler.handleMessage('chat/sendMessage', {
+      text: 'Test with thinking',
+      thinkingMode: true,
+      planMode: false,
+    });
 
     // Verify thinking block messages
     const thinkingMessages = capturedMessages.filter((m) => m.type === 'message/thinking');
@@ -191,7 +224,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
       }
     };
 
-    await messageHandler.handleChatMessage({ text: 'Read a file' });
+    await messageHandler.handleMessage('chat/sendMessage', {
+      text: 'Read a file',
+      thinkingMode: false,
+      planMode: false,
+    });
 
     // Verify tool use messages
     const toolUseMessages = capturedMessages.filter((m) => m.type === 'message/toolUse');
@@ -222,7 +259,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
       }
     };
 
-    await messageHandler.handleChatMessage({ text: 'Count tokens' });
+    await messageHandler.handleMessage('chat/sendMessage', {
+      text: 'Count tokens',
+      thinkingMode: false,
+      planMode: false,
+    });
 
     // Verify token update messages
     const tokenMessages = capturedMessages.filter(
@@ -239,7 +280,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
     assert.strictEqual(stateManager.getCurrentSessionId(), null, 'Should start with no session');
 
     // Simulate session creation through message
-    await messageHandler.handleChatMessage({ text: 'Start conversation' });
+    await messageHandler.handleMessage('chat/sendMessage', {
+      text: 'Start conversation',
+      thinkingMode: false,
+      planMode: false,
+    });
 
     // Verify session messages
     const sessionMessages = capturedMessages.filter((m) => m.type.startsWith('session/'));
@@ -252,7 +297,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
       throw new Error('Simulated API error');
     };
 
-    await messageHandler.handleChatMessage({ text: 'Trigger error' });
+    await messageHandler.handleMessage('chat/sendMessage', {
+      text: 'Trigger error',
+      thinkingMode: false,
+      planMode: false,
+    });
 
     // Verify error handling
     const errorMessages = capturedMessages.filter(
@@ -274,7 +323,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
       return originalPost(type, data);
     };
 
-    await messageHandler.handleChatMessage({ text: 'Track states' });
+    await messageHandler.handleMessage('chat/sendMessage', {
+      text: 'Track states',
+      thinkingMode: false,
+      planMode: false,
+    });
 
     // Verify state transitions occurred
     assert.ok(messageStates.includes('message/update'), 'Should have message updates');
@@ -286,7 +339,11 @@ suite('Message Flow Integration Tests - Baseline', () => {
     const messageCount = 10;
 
     for (let i = 0; i < messageCount; i++) {
-      await messageHandler.handleChatMessage({ text: `Message ${i}` });
+      await messageHandler.handleMessage('chat/sendMessage', {
+        text: `Message ${i}`,
+        thinkingMode: false,
+        planMode: false,
+      });
     }
 
     const endTime = Date.now();

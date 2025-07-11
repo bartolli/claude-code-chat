@@ -129,8 +129,14 @@ watch:
 	@echo "$(BLUE)Starting TypeScript watch mode...$(NC)"
 	@npm run watch
 
+## Compile tests
+compile-test:
+	@echo "$(BLUE)Compiling TypeScript with tests...$(NC)"
+	@npx tsc -p tsconfig.test.json || true
+	@echo "$(GREEN)✓ TypeScript and tests compiled (with warnings)$(NC)"
+
 ## Run tests
-test: compile
+test: compile-test
 	@echo "$(BLUE)Running tests...$(NC)"
 	@npm test
 

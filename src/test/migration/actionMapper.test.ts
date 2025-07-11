@@ -43,11 +43,11 @@ suite('ActionMapper Test Suite', () => {
     }> = [
       {
         action: { type: 'session/messageAdded', payload: { message: 'test' } },
-        expectedType: 'sessions/messageAdded',
+        expectedType: 'session/messageAdded',
       },
       {
         action: { type: 'session/messageUpdated', payload: { id: '123', content: 'updated' } },
-        expectedType: 'sessions/messageUpdated',
+        expectedType: 'session/messageUpdated',
       },
       {
         action: { type: 'claude/setProcessing', payload: { processing: true } },

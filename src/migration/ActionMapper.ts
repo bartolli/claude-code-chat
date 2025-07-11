@@ -13,11 +13,14 @@ import {
   updateTokenUsage,
 } from '../state/slices/sessionSlice';
 import { setWebviewReady, setClaudeRunning, showPermissionRequest } from '../state/slices/uiSlice';
-import { setProcessing } from '../state/slices/claudeSlice';
+import { setProcessing, setError as setClaudeError } from '../state/slices/claudeSlice';
+import { setSelectedModel } from '../state/slices/configSlice';
 import { AnyAction, ActionCreator } from '@reduxjs/toolkit';
 
 /**
- * @todo Complete migration to Redux StateManager
+ * @todo Phase 2: Complete stream message handling integration with ExtensionMessageHandler
+ * - handleStreamMessage needs to coordinate with message update logic
+ * - handleMessageAppended may need to handle incremental appends vs full updates
  */
 
 /**
@@ -118,7 +121,18 @@ export class ActionMapper {
     this.addMapping('session/toolResultAdded', { reduxActionCreator: toolResultAdded });
     this.addMapping('session/tokenUsageUpdated', { reduxActionCreator: tokenUsageUpdated });
     this.addMapping('ui/showPermissionRequest', { reduxActionCreator: showPermissionRequest });
-    this.addMapping('claude/setProcessing', { reduxActionCreator: setProcessing });
+    this.addMapping('claude/setProcessing', {
+      reduxActionCreator: setProcessing,
+      payloadTransform: (payload) => {
+        const processingPayload = payload as {
+          /**
+           *
+           */
+          processing?: boolean;
+        };
+        return processingPayload.processing ?? false;
+      },
+    });
 
     // Mappings with different names
     this.addMapping('session/tokensUpdated', {
@@ -270,53 +284,119 @@ export class ActionMapper {
 
   /**
    * Custom handler for message append
-   * @param _action The webview action (unused)
+   * @param action The webview action
    * @returns Redux action or null if not handled
    */
-  private handleMessageAppended(_action: WebviewAction): AnyAction | null {
-    // This would need to be handled differently as it's appending to existing message
-    // For now, return null to indicate it needs special handling
+  private handleMessageAppended(action: WebviewAction): AnyAction | null {
+    // Message appending is handled by messageUpdated with append logic
+    // Transform to a messageUpdated action
+    const payload = action.payload as {
+      /** Message identifier to update */
+      messageId?: string;
+      /** New content to set */
+      content?: string;
+    };
+    
+    if (payload.messageId && payload.content) {
+      return messageUpdated({
+        role: 'assistant',
+        content: payload.content,
+        messageId: payload.messageId,
+      });
+    }
+    
     return null;
   }
 
   /**
    * Custom handler for model selection
-   * @param _action The webview action (unused)
+   * @param action The webview action
    * @returns Redux action or null if not handled
    */
-  private handleModelSelected(_action: WebviewAction): AnyAction | null {
-    // Model selection affects config, not session state
-    // This would dispatch to config slice
+  private handleModelSelected(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Selected model identifier */
+      model?: string;
+    };
+    
+    if (payload.model) {
+      return setSelectedModel(payload.model as any);
+    }
+    
     return null;
   }
 
   /**
    * Custom handler for error display
-   * @param _action The webview action (unused)
+   * @param action The webview action
    * @returns Redux action or null if not handled
    */
-  private handleShowError(_action: WebviewAction): AnyAction | null {
-    // Errors might need special UI handling
+  private handleShowError(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Error string to display */
+      error?: string;
+      /** Alternative message field */
+      message?: string;
+    };
+    
+    const errorMessage = payload.error || payload.message;
+    if (errorMessage) {
+      return setClaudeError(errorMessage);
+    }
+    
     return null;
   }
 
   /**
    * Custom handler for notifications
-   * @param _action The webview action (unused)
+   * @param action The webview action
    * @returns Redux action or null if not handled
    */
-  private handleShowNotification(_action: WebviewAction): AnyAction | null {
-    // Notifications might bypass Redux entirely
+  private handleShowNotification(action: WebviewAction): AnyAction | null {
+    // Notifications typically bypass Redux and go directly to VS Code API
+    // We'll log this but not map it to Redux
+    const payload = action.payload as {
+      /** Notification message */
+      message?: string;
+      /** Notification type */
+      type?: 'info' | 'warning' | 'error';
+    };
+    
+    if (this.featureFlags.isEnabled('logStateTransitions')) {
+      this.outputChannel.appendLine(
+        `[NOTIFICATION] ${payload.type || 'info'}: ${payload.message || 'No message'}`
+      );
+    }
+    
+    // Return null as notifications are handled outside Redux
     return null;
   }
 
   /**
    * Custom handler for stream messages
-   * @param _action The webview action (unused)
+   * @param action The webview action
    * @returns Redux action or null if not handled
    */
-  private handleStreamMessage(_action: WebviewAction): AnyAction | null {
-    // Stream messages need complex processing
+  private handleStreamMessage(action: WebviewAction): AnyAction | null {
+    // Stream messages need complex processing that involves multiple Redux actions
+    // This would typically update the current message content incrementally
+    const payload = action.payload as {
+      /** Stream chunk data */
+      chunk?: any;
+      /** Session identifier */
+      sessionId?: string;
+      /** Message identifier */
+      messageId?: string;
+    };
+    
+    if (this.featureFlags.isEnabled('logStateTransitions')) {
+      this.outputChannel.appendLine(
+        `[STREAM] Received stream chunk for message ${payload.messageId || 'unknown'}`
+      );
+    }
+    
+    // Stream handling is complex and needs coordination with ExtensionMessageHandler
+    // For now, return null to indicate it needs special handling in Phase 2
     return null;
   }
 

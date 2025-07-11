@@ -1,25 +1,47 @@
 # StateManager Migration Plan - Safety-First Approach
 
 ## **Current Status** 📊
-**Last Updated:** July 2025
+**Last Updated:** July 11, 2025
 
 ### Completed Phases:
 - ✅ **Phase 0: Pre-Migration Safety Net** - Feature flags, tests, documentation
+  - StateComparator with unit tests (17 tests)
+  - Feature flag system with VS Code commands
 - ✅ **Phase 1: Action Mapping Layer** - ActionMapper implementation with full test coverage
+  - All custom handlers implemented (28 unit tests)
+  - Remaining: Stream message handling (Phase 2)
 - ✅ **Hook System Integration** - Automated quality checks and migration tests
+- ✅ **Test Infrastructure Upgrade** - Vitest for fast unit tests + VS Code for integration
+  - 121 unit tests running in ~470ms
+  - See: `docs/statemanager-migration-plan-test-update.md` for details
 
 ### What's Covered by Hooks:
 - **Automatic Quality Checks:** TypeScript, ESLint (with JSDoc), Prettier
 - **Migration Safety:** Feature flag validation, StateManager usage patterns
 - **Test Automation:** Maps file changes to relevant test suites:
-  - `ActionMapper` → `actionMapper.test.ts`
+  - `ActionMapper` → `actionMapper.test.ts` (unit tests)
   - `ExtensionMessageHandler` → `messageFlow.integration.test.ts`
   - `StateManager` → `reduxStore.integration.test.ts`
+  - `StateComparator` → `StateComparator.test.ts` (unit tests)
 
 ### Next Steps:
 - **Phase 2:** ExtensionMessageHandler Integration (Ready to start)
+  - Start with Task 2.0.1 - Analyze ExtensionMessageHandler structure
+  - All tools are ready: ActionMapper, StateComparator, Feature Flags
+  - Detailed sub-tasks with code examples provided
 - **Phase 3:** StateManager Activation
 - **Phase 4:** Testing and Validation
+
+### 🚀 Quick Start for Next Session:
+```bash
+# 1. Check current status
+npm run test:unit  # Should show 121 passing tests
+
+# 2. Start Phase 2 analysis
+grep -n "class ExtensionMessageHandler" src/**/*.ts
+
+# 3. Read the Phase 2 Implementation Guide (line 455)
+```
 
 ---
 
@@ -70,16 +92,24 @@ Migrate from SimpleStateManager to the full Redux-based StateManager to gain per
 - [ ] **0.2.4** Add telemetry for feature flag usage
 
 ### Task 0.3: State Comparison Infrastructure
-- [ ] **0.3.1** Create StateComparator utility
-  ```typescript
-  class StateComparator {
-    compareStates(simple: SimpleState, redux: ReduxState): ValidationResult
-    logDiscrepancies(result: ValidationResult): void
-  }
-  ```
+- [x] **0.3.1** Create StateComparator utility ✅ COMPLETED
+  - **File:** `src/migration/StateComparator.ts`
+  - Compares SimpleStateManager and Redux StateManager states
+  - Logs discrepancies with severity levels
+  - Includes validation reporting and recommendations
 - [ ] **0.3.2** Implement parallel state tracking mechanism
-- [ ] **0.3.3** Add state snapshot capabilities for debugging
+  - **Note:** This will be implemented as part of Phase 2, Task 2.1.2
+  - StateComparator already has the foundation for this
+- [x] **0.3.3** Add state snapshot capabilities for debugging ✅ COMPLETED
+  - `createSnapshot()` method implemented
+  - Sanitizes sensitive data before logging
 - [ ] **0.3.4** Create state migration validator
+  - **Note:** Partially implemented in StateComparator.validateOperation()
+  - Full implementation will come with Phase 3 session migration
+- [x] **0.3.5** Add unit tests for StateComparator (🚀 Use Vitest) ✅ COMPLETED
+  - **File:** `tests/unit/migration/StateComparator.test.ts`
+  - 17 tests covering all functionality
+  - Mocked VS Code APIs and state managers
 
 ---
 
@@ -157,50 +187,265 @@ Migrate from SimpleStateManager to the full Redux-based StateManager to gain per
 *Estimated Time: 4-5 hours*
 *Priority: HIGH - Core functionality migration*
 
+### Task 2.0: Preparation and Analysis 🔍
+- [ ] **2.0.1** Analyze ExtensionMessageHandler structure
+  ```bash
+  # Claude should run:
+  grep -n "class ExtensionMessageHandler" src/**/*.ts
+  # Then read the file and understand:
+  # - Current state management approach
+  # - Message flow patterns
+  # - WebviewProtocol integration points
+  ```
+- [ ] **2.0.2** Create ExtensionMessageHandler unit tests
+  ```typescript
+  // Create tests/unit/services/ExtensionMessageHandler.test.ts
+  // Mock: WebviewProtocol, ClaudeService, StateManager
+  // Test: Message handling, state updates, error scenarios
+  ```
+- [ ] **2.0.3** Document current message flow
+  ```typescript
+  // Update messageTypes.documentation.ts with:
+  // - Exact payload structures from real usage
+  // - Message sequences (e.g., start → stream → complete)
+  // - Error handling flows
+  ```
+
 ### Task 2.1: Read-Only StateManager Integration
-- [ ] **2.1.1** Add StateManager as secondary state source
+- [ ] **2.1.1** Add StateManager and ActionMapper to ExtensionMessageHandler
+  ```typescript
+  // In ExtensionMessageHandler constructor
+  private stateManager?: StateManager;
+  private actionMapper?: ActionMapper;
+  private stateComparator?: StateComparator;
+  
+  constructor(
+    webviewProtocol: WebviewProtocol,
+    claudeService: ClaudeService,
+    context: vscode.ExtensionContext
+  ) {
+    // Add feature flag check
+    if (FeatureFlagManager.getInstance(context).isEnabled('useStateManagerForReads')) {
+      this.stateManager = StateManager.getInstance();
+      this.actionMapper = new ActionMapper(context);
+      this.stateComparator = new StateComparator(
+        this.simpleStateManager,
+        this.stateManager,
+        context
+      );
+    }
+  }
+  ```
+- [ ] **2.1.2** Implement parallel state reading with validation
+  ```typescript
+  getCurrentSessionId(): string | null {
+    const localId = this.currentSessionId;
+    
+    if (this.stateManager && this.featureFlags.isEnabled('useStateManagerForReads')) {
+      const reduxId = this.stateManager.getCurrentSessionId();
+      
+      if (localId !== reduxId) {
+        this.stateComparator?.logDiscrepancies([{
+          path: 'currentSessionId',
+          simpleValue: localId,
+          reduxValue: reduxId,
+          timestamp: new Date(),
+          severity: 'high'
+        }]);
+      }
+      
+      // Return Redux value if feature enabled
+      return reduxId;
+    }
+    
+    return localId;
+  }
+  ```
+- [ ] **2.1.3** Add performance monitoring wrapper
+  ```typescript
+  // Create performance monitoring utility
+  class PerformanceMonitor {
+    private metrics: Map<string, number[]> = new Map();
+    
+    measure<T>(operation: string, fn: () => T): T {
+      const start = performance.now();
+      const result = fn();
+      const duration = performance.now() - start;
+      
+      if (!this.metrics.has(operation)) {
+        this.metrics.set(operation, []);
+      }
+      this.metrics.get(operation)!.push(duration);
+      
+      return result;
+    }
+  }
+  ```
+- [ ] **2.1.4** Create state consistency validator
+  ```typescript
+  // Add to StateComparator
+  validateReadOperation(operation: string, simpleResult: any, reduxResult: any): boolean {
+    if (JSON.stringify(simpleResult) !== JSON.stringify(reduxResult)) {
+      this.logDiscrepancy({
+        path: `read.${operation}`,
+        simpleValue: simpleResult,
+        reduxValue: reduxResult,
+        timestamp: new Date(),
+        severity: 'medium'
+      });
+      return false;
+    }
+    return true;
+  }
+
+### Task 2.2: Incremental Write Migration with ActionMapper
+- [ ] **2.2.1** Integrate ActionMapper for webview messages
   ```typescript
   // In ExtensionMessageHandler
-  private stateManager?: StateManager;
-  private useStateManagerForReads = false; // Feature flag controlled
-  
-  getCurrentSessionId(): string | null {
-    if (this.useStateManagerForReads && this.stateManager) {
-      // Validate against local state
-      const smSessionId = this.stateManager.getCurrentSessionId();
-      if (smSessionId !== this.currentSessionId) {
-        this.logDiscrepancy('sessionId', this.currentSessionId, smSessionId);
+  private handleWebviewMessage(message: WebviewAction) {
+    // Step 1: Use ActionMapper if enabled
+    if (this.actionMapper && this.featureFlags.isEnabled('enableActionMapping')) {
+      const result = this.actionMapper.mapAction(message);
+      
+      if (result.success && result.mappedAction) {
+        // Dispatch to Redux
+        this.stateManager?.dispatch(result.mappedAction);
+        
+        // Continue with existing logic for now (parallel tracking)
+        this.handleLegacyMessage(message);
+      } else if (result.unmapped) {
+        // Log unmapped action, fall back to legacy
+        this.handleLegacyMessage(message);
       }
-      return smSessionId;
+    } else {
+      // Feature disabled, use legacy handling
+      this.handleLegacyMessage(message);
     }
-    return this.currentSessionId;
   }
   ```
-- [ ] **2.1.2** Add state comparison logging
-- [ ] **2.1.3** Monitor read performance impact
-- [ ] **2.1.4** Validate state consistency
-
-### Task 2.2: Incremental Write Migration
-- [ ] **2.2.1** Migrate session creation (keep parallel tracking)
+- [ ] **2.2.2** Implement session creation with dual-write
   ```typescript
-  private createSession(id: string, title: string) {
-    // Original logic
+  private async createSession(id: string, title: string) {
+    // Step 1: Legacy handling
     this.currentSessionId = id;
-    this.webviewProtocol.post('session/created', { id, title });
+    this.sessions.set(id, { messages: [], thinking: null });
     
-    // New StateManager integration (if enabled)
-    if (this.useStateManager && this.stateManager) {
-      this.stateManager.createOrResumeSession(id, title);
-      // Validate state consistency
-      this.validateSessionState(id);
+    // Step 2: Redux handling (if enabled)
+    if (this.stateManager && this.featureFlags.isEnabled('useStateManagerForWrites')) {
+      await this.stateManager.createOrResumeSession(id, title);
+      
+      // Step 3: Validate consistency
+      const validation = this.stateComparator?.compareStates();
+      if (!validation?.isValid) {
+        this.logger.error('State inconsistency after session creation', validation);
+        // Don't fail - log and continue
+      }
+    }
+    
+    // Step 4: Notify webview (unchanged)
+    this.webviewProtocol.post('session/created', { id, title });
+  }
+  ```
+- [ ] **2.2.3** Implement message handling with stream support
+  ```typescript
+  // Create StreamMessageHandler class
+  class StreamMessageHandler {
+    private activeStreams: Map<string, StreamState> = new Map();
+    
+    handleStreamChunk(messageId: string, chunk: any) {
+      // Handle incremental updates
+      if (!this.activeStreams.has(messageId)) {
+        this.activeStreams.set(messageId, { 
+          content: '', 
+          startTime: Date.now() 
+        });
+      }
+      
+      const stream = this.activeStreams.get(messageId)!;
+      stream.content += chunk.text || '';
+      
+      // Update Redux incrementally
+      this.stateManager?.dispatch(messageUpdated({
+        id: messageId,
+        updates: { content: stream.content }
+      }));
+    }
+    
+    completeStream(messageId: string) {
+      this.activeStreams.delete(messageId);
+      this.stateManager?.dispatch(messageCompleted());
     }
   }
   ```
-- [ ] **2.2.2** Migrate message handling with validation
-- [ ] **2.2.3** Migrate thinking block updates
-- [ ] **2.2.4** Migrate tool use tracking
-- [ ] **2.2.5** Migrate token usage updates
-- [ ] **2.2.6** Add rollback triggers for each migration
+- [ ] **2.2.4** Implement thinking block handling
+  ```typescript
+  private handleThinkingUpdate(sessionId: string, thinking: any) {
+    // Legacy update
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.thinking = thinking;
+    }
+    
+    // Redux update (if enabled)
+    if (this.actionMapper && this.featureFlags.isEnabled('useStateManagerForMessages')) {
+      const action: WebviewAction = {
+        type: 'session/thinkingUpdated',
+        payload: { sessionId, thinking }
+      };
+      
+      const result = this.actionMapper.mapAction(action);
+      if (result.success && result.mappedAction) {
+        this.stateManager?.dispatch(result.mappedAction);
+      }
+    }
+    
+    // Validate no duplicate thinking blocks
+    this.validateThinkingBlocks(sessionId);
+  }
+  ```
+- [ ] **2.2.5** Implement tool use tracking
+  ```typescript
+  private trackToolUse(sessionId: string, tool: ToolUse) {
+    // Dispatch both legacy and Redux updates
+    if (this.featureFlags.isEnabled('useStateManagerForTools')) {
+      // Use ActionMapper for consistency
+      const mapped = this.actionMapper?.mapAction({
+        type: 'session/toolUseAdded',
+        payload: tool
+      });
+      
+      if (mapped?.success && mapped.mappedAction) {
+        this.stateManager?.dispatch(mapped.mappedAction);
+      }
+    }
+    
+    // Continue with legacy tracking
+    this.legacyToolTracking(sessionId, tool);
+  }
+  ```
+- [ ] **2.2.6** Create rollback mechanism
+  ```typescript
+  class MigrationRollback {
+    private rollbackHandlers: Map<string, () => void> = new Map();
+    
+    register(feature: string, rollback: () => void) {
+      this.rollbackHandlers.set(feature, rollback);
+    }
+    
+    async executeRollback(feature: string) {
+      const handler = this.rollbackHandlers.get(feature);
+      if (handler) {
+        try {
+          handler();
+          await this.featureFlags.setFlag(feature as any, false);
+          this.logger.info(`Rolled back feature: ${feature}`);
+        } catch (error) {
+          this.logger.error(`Rollback failed for ${feature}:`, error);
+        }
+      }
+    }
+  }
+  ```
 
 ### Task 2.3: State Synchronization with Loop Prevention
 - [ ] **2.3.1** Implement sync direction tracking
@@ -224,6 +469,37 @@ Migrate from SimpleStateManager to the full Redux-based StateManager to gain per
 - [ ] **2.3.2** Add change debouncing mechanism
 - [ ] **2.3.3** Implement selective field synchronization
 - [ ] **2.3.4** Create sync performance monitoring
+
+### 📝 Phase 2 Implementation Guide for Claude
+
+#### Before Starting ANY Task:
+1. **Run the analysis commands** in Task 2.0.1 to understand the codebase
+2. **Read CLAUDE.md** to understand project conventions
+3. **Check feature flags** - they control which code paths are active
+
+#### Key Files to Understand:
+- `src/services/ExtensionMessageHandler.ts` - The main integration point
+- `src/protocol/WebviewProtocol.ts` - How messages flow to/from webview
+- `src/services/ClaudeService.ts` - How Claude API integration works
+- `src/migration/*` - All migration utilities we've built
+
+#### Testing Strategy:
+1. **Unit Tests First** (Task 2.0.2) - Mock all dependencies
+2. **Integration Tests** - Use existing `messageFlow.integration.test.ts`
+3. **Manual Testing** - Create test scenarios with feature flags
+
+#### Common Pitfalls to Avoid:
+- ❌ Don't modify Redux state directly - always use actions
+- ❌ Don't break existing functionality - dual-write is safer
+- ❌ Don't ignore TypeScript errors - they catch real bugs
+- ❌ Don't skip state validation - it prevents corruption
+
+#### Success Criteria for Phase 2:
+- [ ] All existing tests still pass
+- [ ] State comparison shows no discrepancies
+- [ ] Performance metrics show < 5ms overhead
+- [ ] Feature flags can disable any change instantly
+- [ ] No thinking block duplication bugs
 
 ---
 
@@ -282,14 +558,15 @@ Migrate from SimpleStateManager to the full Redux-based StateManager to gain per
 *Estimated Time: 4-5 hours*
 *Priority: CRITICAL - Must pass before proceeding*
 
-### Task 4.1: Unit Testing
+### Task 4.1: Unit Testing (🚀 Vitest - Fast Feedback Loop)
 - [ ] **4.1.1** Test ActionMapper with all known actions
 - [ ] **4.1.2** Test state synchronization logic
 - [ ] **4.1.3** Test loop prevention mechanisms
 - [ ] **4.1.4** Test feature flag toggles
 - [ ] **4.1.5** Test migration rollback scenarios
+  - **Run with**: `npm run test:unit:watch` for TDD cycle
 
-### Task 4.2: Integration Testing
+### Task 4.2: Integration Testing (VS Code Test Runner)
 - [ ] **4.2.1** Test complete conversation flow
   - Start conversation → Send message → Receive response
   - Thinking blocks appear and disappear correctly

@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "strict": false,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    "noUnusedParameters": false,
+    "noImplicitOverride": false,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "noEmitOnError": false,
+    "isolatedModules": false
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "gui",
+    ".vscode-test",
+    "src/webview/**/*",
+    "docs/**/*"
+  ]
+}

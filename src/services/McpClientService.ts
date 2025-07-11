@@ -7,7 +7,7 @@ import { getLogger } from '../core/Logger';
 import { McpServerInfo } from './McpService';
 
 // Import MCP SDK - webpack will bundle these
-const { Client } = require('@modelcontextprotocol/sdk/client/index');
+const { Client } = require('@modelcontextprotocol/sdk/client');
 const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio');
 
 /**

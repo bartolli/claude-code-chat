@@ -17,6 +17,7 @@
 		"noPropertyAccessFromIndexSignature": false,
 		"noUncheckedIndexedAccess": false,
 		"exactOptionalPropertyTypes": false,
+		"skipLibCheck": true,
 		/* Path Aliases */
 		"baseUrl": "./src",
 		"paths": {
@@ -36,6 +37,8 @@
 		"node_modules/@types/glob",
 		"src/webview/**/*",
 		"src/test/**/*",
-		"docs/**/*"
+		"tests/**/*",
+		"docs/**/*",
+		"vitest.config.ts"
 	]
 }

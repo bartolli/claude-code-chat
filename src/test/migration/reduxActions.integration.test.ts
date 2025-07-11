@@ -41,12 +41,9 @@ suite('Redux Actions Integration Test Suite', () => {
       const action: WebviewAction = {
         type: 'session/messageAdded',
         payload: {
-          sessionId: 'test-session',
-          message: {
-            role: 'user',
-            content: 'Test message',
-            messageId: 'msg-1',
-          },
+          role: 'user',
+          content: 'Test message',
+          messageId: 'msg-1',
         },
       };
 

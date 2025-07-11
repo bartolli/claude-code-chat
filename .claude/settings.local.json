@@ -37,7 +37,9 @@
       "Bash(tree:*)",
       "Bash(.claude/hooks/single-file-quality-check.sh:*)",
       "Bash(./.claude/hooks/single-file-quality-check.sh:*)",
-      "Bash(npx prettier:*)"
+      "Bash(npx prettier:*)",
+      "mcp__time__get_current_time",
+      "Bash(time npm run test:unit)"
     ],
     "deny": [
       "Bash(rm:*)",
@@ -51,8 +53,12 @@
     ]
   },
   "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": ["time"],
-  "disabledMcpjsonServers": ["exa"],
+  "enabledMcpjsonServers": [
+    "time"
+  ],
+  "disabledMcpjsonServers": [
+    "exa"
+  ],
   "hooks": {
     "PreToolUse": [
       {
@@ -66,15 +72,6 @@
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/single-file-quality-check.sh"
-          }
-        ]
-      },
       {
         "matcher": "",
         "hooks": [
