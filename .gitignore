@@ -45,3 +45,5 @@ vitest.config.js.map
 
 # Duplicate files
 .claude/settings.local copy*.json
+logs/post_tool_use.json
+logs/pre_tool_use.json
