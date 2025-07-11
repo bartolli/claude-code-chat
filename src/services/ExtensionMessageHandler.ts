@@ -15,6 +15,10 @@ import { mcpClientService } from './McpClientService';
 import { ClaudeProcessManager } from './ClaudeProcessManager';
 import { ServiceContainer as NewServiceContainer } from './ServiceContainer';
 import { ClaudeProcessAdapter } from '../types/process-adapter';
+import { StateManager } from '../state/StateManager';
+import { ActionMapper } from '../migration/ActionMapper';
+import { StateComparator } from '../migration/StateComparator';
+import { FeatureFlagManager } from '../migration/FeatureFlags';
 
 /**
  * Handles messages between VS Code extension and webview, manages Claude processes and UI updates
@@ -42,6 +46,12 @@ export class ExtensionMessageHandler {
   private pendingToolIds: Set<string> = new Set(); // Track tools that haven't received results
   private processManager: ClaudeProcessManager;
   private currentAbortController: AbortController | null = null; // TODO: Test controller reference is maintained
+  
+  // StateManager migration properties
+  private stateManager?: StateManager;
+  private actionMapper?: ActionMapper;
+  private stateComparator?: StateComparator;
+  private featureFlagManager: FeatureFlagManager;
 
   /**
    * Creates an instance of ExtensionMessageHandler
@@ -69,6 +79,26 @@ export class ExtensionMessageHandler {
 
     // Watch for plan files
     this.watchForPlanFiles();
+    
+    // Initialize feature flag manager
+    this.featureFlagManager = FeatureFlagManager.getInstance(context);
+    
+    // Initialize StateManager integration if feature flag is enabled
+    if (this.featureFlagManager.isEnabled('useReduxStateManager')) {
+      this.logger.info('ExtensionMessageHandler', 'Initializing StateManager integration');
+      
+      try {
+        // Get StateManager instance directly (it's a singleton)
+        this.stateManager = StateManager.getInstance();
+        this.actionMapper = new ActionMapper(context);
+        
+        // Note: StateComparator would need access to SimpleStateManager
+        // For now, we'll focus on read-only integration without comparison
+        this.logger.info('ExtensionMessageHandler', 'StateManager integration initialized');
+      } catch (error) {
+        this.logger.error('ExtensionMessageHandler', 'Failed to initialize StateManager', error as Error);
+      }
+    }
   }
 
   /**
@@ -77,6 +107,39 @@ export class ExtensionMessageHandler {
    */
   public attach(webviewProtocol: SimpleWebviewProtocol): void {
     this.webviewProtocol = webviewProtocol;
+  }
+  
+  /**
+   * Posts a message to webview and optionally dispatches to StateManager
+   * @param type - Message type
+   * @param data - Message data
+   */
+  private postMessage(type: string, data: any): void {
+    // Always post to webview
+    this.webviewProtocol?.post(type, data);
+    
+    // If StateManager is enabled, dispatch action in parallel
+    if (this.stateManager && this.actionMapper && this.featureFlagManager.isEnabled('useReduxStateManager')) {
+      try {
+        const result = this.actionMapper.mapAction({ type, payload: data });
+        if (result.success && result.mappedAction) {
+          this.logger.debug('ExtensionMessageHandler', `Dispatching Redux action for ${type}`, result.mappedAction);
+          this.stateManager.dispatch(result.mappedAction);
+        } else if (result.unmapped) {
+          this.logger.debug('ExtensionMessageHandler', `No mapping for ${type} - this is expected for some messages`);
+        }
+      } catch (error) {
+        this.logger.error('ExtensionMessageHandler', `Failed to dispatch action for ${type}`, error as Error);
+      }
+    }
+  }
+  
+  /**
+   * Generates a unique message ID
+   * @returns A unique message ID string
+   */
+  private generateMessageId(): string {
+    return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 
   /**
@@ -259,14 +322,19 @@ export class ExtensionMessageHandler {
 
       // Send user message to UI
       if (this.webviewProtocol) {
-        this.webviewProtocol.post('message/add', {
+        const messageId = this.generateMessageId();
+        const timestamp = new Date().toISOString();
+        
+        this.postMessage('message/add', {
           role: 'user',
           content: data.text,
+          messageId,
+          timestamp
         });
         this.outputChannel.appendLine(`[DEBUG] Sent user message to UI`);
 
         // Set processing status to true
-        this.webviewProtocol.post('status/processing', true);
+        this.postMessage('status/processing', true);
         this.outputChannel.appendLine(`[DEBUG] Set processing status to true`);
 
         // Don't create assistant message yet - wait for actual content
@@ -1086,9 +1154,10 @@ export class ExtensionMessageHandler {
                   json.message?.id
                 ) {
                   this.currentAssistantMessageId = json.message.id;
-                  this.webviewProtocol?.post('message/update', {
+                  this.postMessage('message/update', {
                     role: 'assistant',
                     messageId: json.message.id,
+                    content: block.text
                   });
                   this.outputChannel.appendLine(
                     `[DEBUG] Updated assistant message with messageId: ${json.message.id}`

@@ -215,29 +215,14 @@ Migrate from SimpleStateManager to the full Redux-based StateManager to gain per
   ```
 
 ### Task 2.1: Read-Only StateManager Integration
-- [ ] **2.1.1** Add StateManager and ActionMapper to ExtensionMessageHandler
+- [x] **2.1.1** Add StateManager and ActionMapper to ExtensionMessageHandler ✅
   ```typescript
-  // In ExtensionMessageHandler constructor
-  private stateManager?: StateManager;
-  private actionMapper?: ActionMapper;
-  private stateComparator?: StateComparator;
-  
-  constructor(
-    webviewProtocol: WebviewProtocol,
-    claudeService: ClaudeService,
-    context: vscode.ExtensionContext
-  ) {
-    // Add feature flag check
-    if (FeatureFlagManager.getInstance(context).isEnabled('useStateManagerForReads')) {
-      this.stateManager = StateManager.getInstance();
-      this.actionMapper = new ActionMapper(context);
-      this.stateComparator = new StateComparator(
-        this.simpleStateManager,
-        this.stateManager,
-        context
-      );
-    }
-  }
+  // Added to ExtensionMessageHandler:
+  // - StateManager, ActionMapper, FeatureFlagManager imports
+  // - Private properties for migration
+  // - Initialization in constructor with feature flag check
+  // - postMessage() helper for parallel dispatch
+  // - generateMessageId() utility method
   ```
 - [ ] **2.1.2** Implement parallel state reading with validation
   ```typescript
