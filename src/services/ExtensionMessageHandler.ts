@@ -110,15 +110,13 @@ export class ExtensionMessageHandler {
   }
   
   /**
-   * Posts a message to webview and optionally dispatches to StateManager
+   * Dispatches an action to StateManager in parallel with webview posts
+   * This is used for read-only parallel state updates during migration
    * @param type - Message type
    * @param data - Message data
    */
-  private postMessage(type: string, data: any): void {
-    // Always post to webview
-    this.webviewProtocol?.post(type, data);
-    
-    // If StateManager is enabled, dispatch action in parallel
+  private dispatchToStateManager(type: string, data: any): void {
+    // Only dispatch if StateManager is enabled
     if (this.stateManager && this.actionMapper && this.featureFlagManager.isEnabled('useReduxStateManager')) {
       try {
         const result = this.actionMapper.mapAction({ type, payload: data });
@@ -322,19 +320,25 @@ export class ExtensionMessageHandler {
 
       // Send user message to UI
       if (this.webviewProtocol) {
-        const messageId = this.generateMessageId();
-        const timestamp = new Date().toISOString();
-        
-        this.postMessage('message/add', {
+        this.webviewProtocol.post('message/add', {
           role: 'user',
           content: data.text,
-          messageId,
-          timestamp
         });
         this.outputChannel.appendLine(`[DEBUG] Sent user message to UI`);
+        
+        // Dispatch to StateManager in parallel (read-only)
+        this.dispatchToStateManager('message/add', {
+          role: 'user',
+          content: data.text,
+          messageId: this.generateMessageId(),
+          timestamp: new Date().toISOString()
+        });
 
         // Set processing status to true
-        this.postMessage('status/processing', true);
+        this.webviewProtocol.post('status/processing', true);
+        
+        // Dispatch to StateManager in parallel (read-only)
+        this.dispatchToStateManager('status/processing', true);
         this.outputChannel.appendLine(`[DEBUG] Set processing status to true`);
 
         // Don't create assistant message yet - wait for actual content
@@ -1154,10 +1158,9 @@ export class ExtensionMessageHandler {
                   json.message?.id
                 ) {
                   this.currentAssistantMessageId = json.message.id;
-                  this.postMessage('message/update', {
+                  this.webviewProtocol?.post('message/update', {
                     role: 'assistant',
                     messageId: json.message.id,
-                    content: block.text
                   });
                   this.outputChannel.appendLine(
                     `[DEBUG] Updated assistant message with messageId: ${json.message.id}`
