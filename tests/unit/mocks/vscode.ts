@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi } from 'vitest';
 
 // Mock VS Code API
 export const workspace = {
@@ -9,8 +9,8 @@ export const workspace = {
         'claude-code-chat.migration.useReduxStateManager': false,
         'claude-code-chat.migration.enableActionMapping': false,
         'claude-code-chat.migration.logStateDiscrepancies': true,
-      }
-      return defaults[key]
+      };
+      return defaults[key];
     }),
     update: vi.fn(),
     has: vi.fn(),
@@ -18,7 +18,7 @@ export const workspace = {
   })),
   workspaceFolders: [],
   onDidChangeConfiguration: vi.fn(),
-}
+};
 
 export const window = {
   showErrorMessage: vi.fn(),
@@ -32,12 +32,12 @@ export const window = {
     hide: vi.fn(),
     dispose: vi.fn(),
   })),
-}
+};
 
 export const commands = {
   registerCommand: vi.fn(),
   executeCommand: vi.fn(),
-}
+};
 
 export const ExtensionContext = vi.fn().mockImplementation(() => ({
   subscriptions: [],
@@ -58,7 +58,7 @@ export const ExtensionContext = vi.fn().mockImplementation(() => ({
   storagePath: '/mock/storage/path',
   globalStoragePath: '/mock/global/storage/path',
   logPath: '/mock/log/path',
-}))
+}));
 
 // Export enums
 export enum ConfigurationTarget {
@@ -74,7 +74,10 @@ export enum ExtensionMode {
 }
 
 // Export types
-export type Disposable = { dispose: () => void }
+export type Disposable = { /**
+                            *
+                            */
+dispose: () => void }
 
 // Default export for convenience
 export default {
@@ -84,4 +87,4 @@ export default {
   ExtensionContext,
   ConfigurationTarget,
   ExtensionMode,
-}
+};

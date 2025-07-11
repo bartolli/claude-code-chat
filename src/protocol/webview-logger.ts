@@ -75,7 +75,7 @@ export class WebviewLogger {
    */
   static debug(message: string, ...args: any[]) {
     if (WebviewLogger.config.level <= LogLevel.DEBUG) {
-      // eslint-disable-next-line no-console
+       
       console.log(WebviewLogger.format('[DEBUG]', message), ...args);
     }
   }
@@ -87,7 +87,7 @@ export class WebviewLogger {
    */
   static info(message: string, ...args: any[]) {
     if (WebviewLogger.config.level <= LogLevel.INFO) {
-      // eslint-disable-next-line no-console
+       
       console.log(WebviewLogger.format('[INFO]', message), ...args);
     }
   }
@@ -99,7 +99,7 @@ export class WebviewLogger {
    */
   static warn(message: string, ...args: any[]) {
     if (WebviewLogger.config.level <= LogLevel.WARN) {
-      // eslint-disable-next-line no-console
+       
       console.warn(WebviewLogger.format('[WARN]', message), ...args);
     }
   }
@@ -111,7 +111,7 @@ export class WebviewLogger {
    */
   static error(message: string, ...args: any[]) {
     if (WebviewLogger.config.level <= LogLevel.ERROR) {
-      // eslint-disable-next-line no-console
+       
       console.error(WebviewLogger.format('[ERROR]', message), ...args);
     }
   }

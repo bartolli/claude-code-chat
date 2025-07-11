@@ -133,6 +133,15 @@ export class ActionMapper {
         return processingPayload.processing ?? false;
       },
     });
+    
+    // Map status/processing to the same action
+    this.addMapping('status/processing', {
+      reduxActionCreator: setProcessing,
+      payloadTransform: (payload) => {
+        // If payload is a boolean, use it directly
+        return typeof payload === 'boolean' ? payload : false;
+      },
+    });
 
     // Mappings with different names
     this.addMapping('session/tokensUpdated', {
@@ -149,6 +158,15 @@ export class ActionMapper {
           inputTokens: tokenPayload.input || 0,
           outputTokens: tokenPayload.output || 0,
         };
+      },
+    });
+    
+    // Map message/tokenUsage to the same Redux action
+    this.addMapping('message/tokenUsage', {
+      reduxActionCreator: updateTokenUsage,
+      payloadTransform: (payload) => {
+        // Already in correct format
+        return payload;
       },
     });
 
@@ -198,6 +216,11 @@ export class ActionMapper {
     this.addMapping('ui/showError', {
       customHandler: this.handleShowError.bind(this),
     });
+    
+    // Map error/show to the same handler as ui/showError
+    this.addMapping('error/show', {
+      customHandler: this.handleShowError.bind(this),
+    });
 
     this.addMapping('ui/showNotification', {
       customHandler: this.handleShowNotification.bind(this),
@@ -205,6 +228,36 @@ export class ActionMapper {
 
     this.addMapping('stream/messageReceived', {
       customHandler: this.handleStreamMessage.bind(this),
+    });
+    
+    // Map chat/messageComplete to messageCompleted action
+    this.addMapping('chat/messageComplete', {
+      customHandler: this.handleMessageComplete.bind(this),
+    });
+    
+    // Map message/update for streaming content updates
+    this.addMapping('message/update', {
+      customHandler: this.handleMessageUpdate.bind(this),
+    });
+    
+    // Map message/thinking for thinking block updates
+    this.addMapping('message/thinking', {
+      customHandler: this.handleThinkingUpdate.bind(this),
+    });
+    
+    // Map message/toolUse for tool usage tracking
+    this.addMapping('message/toolUse', {
+      customHandler: this.handleToolUse.bind(this),
+    });
+    
+    // Map message/toolResult for tool result tracking
+    this.addMapping('message/toolResult', {
+      customHandler: this.handleToolResult.bind(this),
+    });
+    
+    // Map terminal/opened for terminal notifications
+    this.addMapping('terminal/opened', {
+      customHandler: this.handleTerminalOpened.bind(this),
     });
   }
 
@@ -397,6 +450,177 @@ export class ActionMapper {
     
     // Stream handling is complex and needs coordination with ExtensionMessageHandler
     // For now, return null to indicate it needs special handling in Phase 2
+    return null;
+  }
+  
+  /**
+   * Custom handler for message complete with metadata
+   * @param action The webview action
+   * @returns Redux action or null if not handled
+   */
+  private handleMessageComplete(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Session identifier */
+      sessionId?: string;
+      /** Total cost in USD */
+      totalCost?: number;
+      /** Duration in milliseconds */
+      duration?: number;
+    };
+    
+    // Always dispatch messageCompleted to mark loading as false
+    // Note: We can't dispatch multiple actions from here, so we'll
+    // just return messageCompleted. The metadata should be handled
+    // separately via updateTokenUsage when token counts are available
+    return messageCompleted();
+  }
+  
+  /**
+   * Custom handler for message updates during streaming
+   * @param action The webview action
+   * @returns Redux action or null if not handled
+   */
+  private handleMessageUpdate(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Message role */
+      role?: string;
+      /** Message identifier */
+      messageId?: string;
+      /** Updated content (optional) */
+      content?: string;
+    };
+    
+    // Only handle if we have required fields
+    if (payload.messageId) {
+      return messageUpdated({
+        role: 'assistant' as const,  // message/update is always for assistant messages
+        content: payload.content || '',
+        messageId: payload.messageId,
+      });
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Custom handler for thinking block updates
+   * @param action The webview action
+   * @returns Redux action or null if not handled
+   */
+  private handleThinkingUpdate(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Thinking content */
+      content?: string;
+      /** Whether thinking is currently active */
+      isActive?: boolean;
+      /** Message identifier */
+      messageId?: string;
+      /** Current line number */
+      currentLine?: number;
+      /** Duration if completed */
+      duration?: number;
+      /** Whether this is incremental */
+      isIncremental?: boolean;
+    };
+    
+    // Only handle if we have thinking content
+    if (payload.content !== undefined) {
+      return thinkingUpdated({
+        content: payload.content,
+        isActive: payload.isActive ?? true,
+        messageId: payload.messageId,
+        currentLine: payload.currentLine?.toString(),  // Convert number to string if needed
+        duration: payload.duration,
+        isIncremental: payload.isIncremental,
+      });
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Custom handler for tool use tracking
+   * @param action The webview action
+   * @returns Redux action or null if not handled
+   */
+  private handleToolUse(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Tool name */
+      toolName?: string;
+      /** Tool identifier */
+      toolId?: string;
+      /** Tool input parameters */
+      input?: any;
+      /** Tool status */
+      status?: string;
+      /** Parent tool use ID for nested tools */
+      parentToolUseId?: string;
+    };
+    
+    // Only handle if we have required fields
+    if (payload.toolName && payload.toolId) {
+      return toolUseAdded({
+        toolName: payload.toolName,
+        toolId: payload.toolId,
+        input: payload.input,
+        status: payload.status || 'calling',  // Default to 'calling' if not provided
+        parentToolUseId: payload.parentToolUseId,
+      });
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Custom handler for tool result tracking
+   * @param action The webview action
+   * @returns Redux action or null if not handled
+   */
+  private handleToolResult(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Tool identifier */
+      toolId?: string;
+      /** Tool result data */
+      result?: any;
+      /** Whether the result indicates an error */
+      isError?: boolean;
+      /** Tool status */
+      status?: string;
+      /** Parent tool use ID for nested tools */
+      parentToolUseId?: string;
+    };
+    
+    // Only handle if we have required fields
+    if (payload.toolId && payload.result !== undefined) {
+      return toolResultAdded({
+        toolId: payload.toolId,
+        result: payload.result,
+        isError: payload.isError ?? false,
+        status: payload.status || 'complete',  // Default to 'complete' if not provided
+        parentToolUseId: payload.parentToolUseId,
+      });
+    }
+    
+    return null;
+  }
+
+  /**
+   * Handle terminal/opened actions for terminal notifications
+   * @param action The webview action containing terminal message
+   * @returns A Redux action or null
+   */
+  private handleTerminalOpened(action: WebviewAction): AnyAction | null {
+    const payload = action.payload as {
+      /** Terminal notification message */
+      message?: string;
+    };
+    
+    if (payload.message) {
+      this.outputChannel.appendLine(`[Terminal] Opened with message: ${payload.message}`);
+      // For now, just log terminal notifications
+      // In the future, this could dispatch to a Redux slice for terminal state
+    }
+    
     return null;
   }
 

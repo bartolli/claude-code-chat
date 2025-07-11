@@ -261,9 +261,9 @@ describe('ExtensionMessageHandler', () => {
     it('should handle settings/get', async () => {
       // Mock workspaceState.get to return expected values
       mockContext.workspaceState.get = vi.fn((key, defaultValue) => {
-        if (key === 'selectedModel') return 'claude-3-opus';
-        if (key === 'autoSave') return true;
-        if (key === 'gitBackup') return false;
+        if (key === 'selectedModel') {return 'claude-3-opus';}
+        if (key === 'autoSave') {return true;}
+        if (key === 'gitBackup') {return false;}
         return defaultValue;
       });
 

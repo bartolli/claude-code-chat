@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 'use strict';
 /**
  * Abort functionality test utilities for VS Code Debug Console

@@ -19,6 +19,120 @@ import { StateManager } from '../state/StateManager';
 import { ActionMapper } from '../migration/ActionMapper';
 import { StateComparator } from '../migration/StateComparator';
 import { FeatureFlagManager } from '../migration/FeatureFlags';
+import { ToolTracker } from './ToolTracker';
+
+/**
+ * Simple performance monitoring utility for tracking operation durations
+ */
+class PerformanceMonitor {
+  private metrics: Map<string, number[]> = new Map();
+  private logger: Logger;
+  
+  /**
+   * Creates a new PerformanceMonitor instance
+   * @param logger - Logger instance for output
+   */
+  constructor(logger: Logger) {
+    this.logger = logger;
+  }
+  
+  /**
+   * Measures the duration of a synchronous operation
+   * @param operation - Name of the operation to measure
+   * @param fn - Function to execute and measure
+   * @returns The result of the function
+   */
+  measure<T>(operation: string, fn: () => T): T {
+    const start = performance.now();
+    const result = fn();
+    const duration = performance.now() - start;
+    
+    this.recordMetric(operation, duration);
+    
+    return result;
+  }
+  
+  /**
+   * Measures the duration of an asynchronous operation
+   * @param operation - Name of the operation to measure
+   * @param fn - Async function to execute and measure
+   * @returns The result of the async function
+   */
+  async measureAsync<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+    const start = performance.now();
+    const result = await fn();
+    const duration = performance.now() - start;
+    
+    this.recordMetric(operation, duration);
+    
+    return result;
+  }
+  
+  /**
+   * Records a metric for an operation
+   * @param operation - Name of the operation
+   * @param duration - Duration in milliseconds
+   */
+  private recordMetric(operation: string, duration: number): void {
+    if (!this.metrics.has(operation)) {
+      this.metrics.set(operation, []);
+    }
+    const durations = this.metrics.get(operation)!;
+    durations.push(duration);
+    
+    // Keep only last 100 measurements per operation
+    if (durations.length > 100) {
+      durations.shift();
+    }
+    
+    // Log if duration exceeds threshold
+    if (duration > 100) {
+      this.logger.warn('PerformanceMonitor', `Slow operation detected: ${operation} took ${duration.toFixed(2)}ms`);
+    }
+  }
+  
+  /**
+   * Gets performance statistics for an operation
+   * @param operation - Name of the operation
+   * @returns Statistics object or null if no data
+   */
+  getStats(operation: string): { 
+    /** Average duration in milliseconds */
+    avg: number; 
+    /** Minimum duration in milliseconds */
+    min: number; 
+    /** Maximum duration in milliseconds */
+    max: number; 
+    /** Number of recorded operations */
+    count: number 
+  } | null {
+    const durations = this.metrics.get(operation);
+    if (!durations || durations.length === 0) {
+      return null;
+    }
+    
+    const sum = durations.reduce((a, b) => a + b, 0);
+    return {
+      avg: sum / durations.length,
+      min: Math.min(...durations),
+      max: Math.max(...durations),
+      count: durations.length
+    };
+  }
+  
+  /**
+   * Logs all performance statistics
+   */
+  logAllStats(): void {
+    this.logger.info('PerformanceMonitor', 'Performance Statistics:');
+    for (const [operation, durations] of this.metrics) {
+      const stats = this.getStats(operation);
+      if (stats) {
+        this.logger.info('PerformanceMonitor', `  ${operation}: avg=${stats.avg.toFixed(2)}ms, min=${stats.min.toFixed(2)}ms, max=${stats.max.toFixed(2)}ms, count=${stats.count}`);
+      }
+    }
+  }
+}
 
 /**
  * Handles messages between VS Code extension and webview, manages Claude processes and UI updates
@@ -52,6 +166,8 @@ export class ExtensionMessageHandler {
   private actionMapper?: ActionMapper;
   private stateComparator?: StateComparator;
   private featureFlagManager: FeatureFlagManager;
+  private performanceMonitor: PerformanceMonitor;
+  private toolTracker: ToolTracker;
 
   /**
    * Creates an instance of ExtensionMessageHandler
@@ -83,6 +199,12 @@ export class ExtensionMessageHandler {
     // Initialize feature flag manager
     this.featureFlagManager = FeatureFlagManager.getInstance(context);
     
+    // Initialize performance monitor
+    this.performanceMonitor = new PerformanceMonitor(this.logger);
+    
+    // Initialize tool tracker
+    this.toolTracker = new ToolTracker(this.logger);
+    
     // Initialize StateManager integration if feature flag is enabled
     if (this.featureFlagManager.isEnabled('useReduxStateManager')) {
       this.logger.info('ExtensionMessageHandler', 'Initializing StateManager integration');
@@ -98,6 +220,13 @@ export class ExtensionMessageHandler {
       } catch (error) {
         this.logger.error('ExtensionMessageHandler', 'Failed to initialize StateManager', error as Error);
       }
+    }
+    
+    // Log performance stats periodically in debug mode
+    if (this.featureFlagManager.isEnabled('logStateTransitions')) {
+      setInterval(() => {
+        this.performanceMonitor.logAllStats();
+      }, 60000); // Every minute
     }
   }
 
@@ -133,11 +262,186 @@ export class ExtensionMessageHandler {
   }
   
   /**
+   * Posts a message to webview and dispatches to StateManager in parallel
+   * This ensures dual state updates during migration
+   * @param type - Message type
+   * @param data - Message data
+   */
+  private postWithDispatch(type: string, data: any): void {
+    // Always post to webview first (existing behavior)
+    if (this.webviewProtocol) {
+      this.webviewProtocol.post(type, data);
+    }
+    
+    // Then dispatch to StateManager in parallel
+    this.dispatchToStateManager(type, data);
+  }
+  
+  /**
+   * Gets the current session ID with parallel state validation
+   * Reads from both local state and StateManager to detect discrepancies
+   * @returns The current session ID (from Redux if enabled, otherwise local)
+   */
+  private getCurrentSessionId(): string | null {
+    return this.performanceMonitor.measure('getCurrentSessionId', () => {
+      const localId = this.currentSessionId;
+      
+      // If StateManager reads are enabled, compare with Redux state
+      if (this.stateManager && this.featureFlagManager.isEnabled('useStateManagerForReads')) {
+        const reduxId = this.stateManager.getCurrentSessionId() || null;
+        
+        // Log discrepancy if they don't match
+        if (localId !== reduxId) {
+          this.logger.warn('ExtensionMessageHandler', 'Session ID discrepancy detected', {
+            local: localId,
+            redux: reduxId,
+            severity: 'high'
+          });
+          
+          // Use StateComparator if available
+          if (this.stateComparator) {
+            this.stateComparator.logDiscrepancies([{
+              path: 'currentSessionId',
+              simpleValue: localId,
+              reduxValue: reduxId,
+              timestamp: new Date(),
+              severity: 'high'
+            }]);
+          }
+        }
+        
+        // Return Redux value if feature enabled
+        return reduxId;
+      }
+      
+      // Return local value if not using Redux reads
+      return localId;
+    });
+  }
+  
+  /**
+   * Gets the processing state with parallel validation
+   * @returns Whether Claude is currently processing
+   */
+  private getProcessingState(): boolean {
+    return this.performanceMonitor.measure('getProcessingState', () => {
+      const localProcessing = this.currentClaudeProcess !== null;
+      
+      if (this.stateManager && this.featureFlagManager.isEnabled('useStateManagerForReads')) {
+        const reduxState = this.stateManager.getState();
+        const reduxProcessing = reduxState.claude.isProcessing;
+        
+        // Log discrepancy if they don't match
+        if (localProcessing !== reduxProcessing) {
+          this.logger.warn('ExtensionMessageHandler', 'Processing state discrepancy', {
+            local: localProcessing,
+            redux: reduxProcessing,
+            severity: 'medium'
+          });
+        }
+        
+        // Return Redux value if feature enabled
+        return reduxProcessing;
+      }
+      
+      return localProcessing;
+    });
+  }
+  
+  /**
+   * Gets the selected model with parallel validation
+   * @returns The currently selected model
+   */
+  private getSelectedModel(): string {
+    return this.performanceMonitor.measure('getSelectedModel', () => {
+      const localModel = this.context.workspaceState.get<string>('selectedModel', 'sonnet');
+      
+      if (this.stateManager && this.featureFlagManager.isEnabled('useStateManagerForReads')) {
+        const reduxModel = this.stateManager.getSelectedModel();
+        
+        // Log discrepancy if they don't match
+        if (localModel !== reduxModel) {
+          this.logger.warn('ExtensionMessageHandler', 'Selected model discrepancy', {
+            local: localModel,
+            redux: reduxModel,
+            severity: 'low'
+          });
+        }
+        
+        // Return Redux value if feature enabled
+        return reduxModel;
+      }
+      
+      return localModel;
+    });
+  }
+  
+  /**
+   * Sets the current session ID with dual-write to both local and Redux state
+   * @param sessionId - The session ID to set (null to clear)
+   */
+  private setCurrentSessionId(sessionId: string | null): void {
+    // Always update local state
+    this.currentSessionId = sessionId;
+    
+    // Update Redux state if enabled
+    if (this.stateManager && this.featureFlagManager.isEnabled('useStateManagerForWrites')) {
+      try {
+        if (sessionId) {
+          // Create or resume session in StateManager
+          this.stateManager.createOrResumeSession(sessionId);
+          this.logger.debug('ExtensionMessageHandler', `Session ${sessionId} set in StateManager`);
+        } else {
+          // Clear session - note: Redux doesn't have a direct "clear current session" method
+          // We'll just log this for now
+          this.logger.debug('ExtensionMessageHandler', 'Session cleared locally (Redux keeps history)');
+        }
+        
+        // Validate consistency if comparator is available
+        if (this.stateComparator) {
+          const validation = this.stateComparator.compareStates();
+          if (!validation?.isValid) {
+            this.logger.warn('ExtensionMessageHandler', 'State inconsistency after session update', validation);
+          }
+        }
+      } catch (error) {
+        this.logger.error('ExtensionMessageHandler', `Failed to update session in StateManager`, error as Error);
+        // Don't fail - continue with local state
+      }
+    }
+  }
+  
+  /**
    * Generates a unique message ID
    * @returns A unique message ID string
    */
   private generateMessageId(): string {
     return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  /**
+   * Get comprehensive tool tracking report
+   * @returns Tool usage analytics and statistics
+   */
+  getToolTrackingReport(): any {
+    return this.toolTracker.getTrackingReport();
+  }
+
+  /**
+   * Get tool statistics for a specific tool
+   * @param toolName - Name of the tool
+   * @returns Tool usage statistics or null if not found
+   */
+  getToolStats(toolName: string): any {
+    return this.toolTracker.getToolStats(toolName);
+  }
+
+  /**
+   * Export all tool tracking data for analysis
+   * @returns JSON string with comprehensive tool data
+   */
+  exportToolTrackingData(): string {
+    return this.toolTracker.exportTrackingData();
   }
 
   /**
@@ -161,7 +465,7 @@ export class ExtensionMessageHandler {
 
       case 'chat/newSession':
         this.logger.info('ExtensionMessageHandler', 'New session requested');
-        this.currentSessionId = null;
+        this.setCurrentSessionId(null);
         this.outputChannel.appendLine(
           `[DEBUG] Session cleared - next message will start new session`
         );
@@ -170,7 +474,7 @@ export class ExtensionMessageHandler {
       case 'settings/get':
         // Return current settings
         return {
-          selectedModel: this.context.workspaceState.get('selectedModel', 'default'),
+          selectedModel: this.getSelectedModel() || 'default',
           autoSave: this.context.workspaceState.get('autoSave', true),
           gitBackup: this.context.workspaceState.get('gitBackup', false),
         };
@@ -227,7 +531,7 @@ export class ExtensionMessageHandler {
         });
 
         // Update UI
-        this.webviewProtocol?.post('planMode/toggle', false);
+        this.postWithDispatch('planMode/toggle', false);
         return;
 
       case 'plan/refine':
@@ -253,7 +557,7 @@ export class ExtensionMessageHandler {
           this.currentAbortController = null;
 
           // Update UI to show stopped state
-          this.webviewProtocol?.post('status/processing', false);
+          this.postWithDispatch('status/processing', false);
           this.outputChannel.appendLine(`[Stop] Abort signal sent`);
         } else if (this.currentClaudeProcess && this.currentClaudeProcess.stdin) {
           // Fallback to ESC character if no abort controller
@@ -262,7 +566,7 @@ export class ExtensionMessageHandler {
           this.outputChannel.appendLine(`[Stop] Sent ESC to Claude process`);
 
           // Update UI to show stopped state
-          this.webviewProtocol?.post('status/processing', false);
+          this.postWithDispatch('status/processing', false);
         } else {
           this.outputChannel.appendLine(`[Stop] No active Claude process to stop`);
         }
@@ -315,48 +619,34 @@ export class ExtensionMessageHandler {
       }
 
       // Get selected model
-      const selectedModel = this.context.workspaceState.get<string>('selectedModel', 'sonnet');
+      const selectedModel = this.getSelectedModel();
       this.outputChannel.appendLine(`Selected model: ${selectedModel}`);
 
-      // Send user message to UI
-      if (this.webviewProtocol) {
-        this.webviewProtocol.post('message/add', {
-          role: 'user',
-          content: data.text,
-        });
-        this.outputChannel.appendLine(`[DEBUG] Sent user message to UI`);
-        
-        // Dispatch to StateManager in parallel (read-only)
-        this.dispatchToStateManager('message/add', {
-          role: 'user',
-          content: data.text,
-          messageId: this.generateMessageId(),
-          timestamp: new Date().toISOString()
-        });
+      // Send user message to UI with dual dispatch
+      this.postWithDispatch('message/add', {
+        role: 'user',
+        content: data.text,
+        messageId: this.generateMessageId(),
+        timestamp: new Date().toISOString()
+      });
+      this.outputChannel.appendLine(`[DEBUG] Sent user message to UI with Redux dispatch`);
 
-        // Set processing status to true
-        this.webviewProtocol.post('status/processing', true);
-        
-        // Dispatch to StateManager in parallel (read-only)
-        this.dispatchToStateManager('status/processing', true);
-        this.outputChannel.appendLine(`[DEBUG] Set processing status to true`);
+      // Set processing status to true
+      this.postWithDispatch('status/processing', true);
+      this.outputChannel.appendLine(`[DEBUG] Set processing status to true`);
 
-        // Don't create assistant message yet - wait for actual content
-        // This prevents the double processing indicator
-        this.hasCreatedAssistantMessage = false;
-        this.currentAssistantMessageId = null;
-        this.isFirstTextBlock = true; // Reset for new message
-        this.hasSeenToolUse = false; // Reset tool tracking
-        this.outputChannel.appendLine(
-          `[DEBUG] Waiting for content before creating assistant message`
-        );
+      // Don't create assistant message yet - wait for actual content
+      // This prevents the double processing indicator
+      this.hasCreatedAssistantMessage = false;
+      this.currentAssistantMessageId = null;
+      this.isFirstTextBlock = true; // Reset for new message
+      this.hasSeenToolUse = false; // Reset tool tracking
+      this.outputChannel.appendLine(
+        `[DEBUG] Waiting for content before creating assistant message`
+      );
 
-        // Reset message creation flag for new message
-        this.thinkingMessageId = null;
-      } else {
-        this.outputChannel.appendLine(`[ERROR] WebviewProtocol not initialized!`);
-        throw new Error('WebviewProtocol not initialized');
-      }
+      // Reset message creation flag for new message
+      this.thinkingMessageId = null;
 
       // Get workspace folder for cwd
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -364,8 +654,9 @@ export class ExtensionMessageHandler {
 
       // Note: ClaudeProcessManager will build the arguments
       // We just need to ensure we use --resume if we have a session
-      if (this.currentSessionId) {
-        this.outputChannel.appendLine(`[DEBUG] Resuming session: ${this.currentSessionId}`);
+      const currentSessionId = this.getCurrentSessionId();
+      if (currentSessionId) {
+        this.outputChannel.appendLine(`[DEBUG] Resuming session: ${currentSessionId}`);
       } else {
         this.outputChannel.appendLine(`[DEBUG] Starting new session`);
       }
@@ -527,7 +818,7 @@ export class ExtensionMessageHandler {
             !apiKey &&
             (testError.message.includes('not authenticated') || testError.message.includes('login'))
           ) {
-            this.webviewProtocol?.post('error/show', {
+            this.postWithDispatch('error/show', {
               message:
                 'Please authenticate with Claude by running "claude login" in your terminal, or set the ANTHROPIC_API_KEY environment variable.',
             });
@@ -536,7 +827,7 @@ export class ExtensionMessageHandler {
         }
       } catch (error: any) {
         this.outputChannel.appendLine(`[ERROR] Claude CLI check failed: ${error.message}`);
-        this.webviewProtocol?.post('error/show', {
+        this.postWithDispatch('error/show', {
           message:
             'Claude CLI not found. Please install it with: npm install -g @anthropic-ai/claude-code',
         });
@@ -579,7 +870,17 @@ export class ExtensionMessageHandler {
       }
 
       // Generate session ID if we don't have one
-      const sessionId = this.currentSessionId || `session_${Date.now()}`;
+      const existingSessionId = this.getCurrentSessionId();
+      const sessionId = existingSessionId || `session_${Date.now()}`;
+      
+      // If this is a new session, update state
+      if (!existingSessionId) {
+        this.setCurrentSessionId(sessionId);
+        this.outputChannel.appendLine(`[DEBUG] Created new session: ${sessionId}`);
+        
+        // Start session tracking
+        this.toolTracker.startSession(sessionId);
+      }
 
       // Create AbortController for this session
       const abortController = new AbortController();
@@ -591,7 +892,7 @@ export class ExtensionMessageHandler {
 
       // Always use --continue for current session continuity
       let resumeOption: string | undefined = undefined;
-      if (this.currentSessionId) {
+      if (existingSessionId) {
         // Use --continue for the most recent conversation
         resumeOption = 'continue';
         this.outputChannel.appendLine(`[DEBUG] Using --continue flag for current session`);
@@ -615,14 +916,14 @@ export class ExtensionMessageHandler {
         ) {
           this.outputChannel.appendLine(`[Stop] Process spawn was aborted`);
           this.logger.info('ExtensionMessageHandler', 'Spawn aborted by user');
-          this.webviewProtocol?.post('status/processing', false);
+          this.postWithDispatch('status/processing', false);
           return;
         }
 
         this.outputChannel.appendLine(
           `[ERROR] Failed to spawn Claude: ${spawnResult.error.message}`
         );
-        this.webviewProtocol?.post('error/show', {
+        this.postWithDispatch('error/show', {
           message: `Failed to start Claude: ${spawnResult.error.message}`,
         });
         return;
@@ -648,7 +949,7 @@ export class ExtensionMessageHandler {
         if (this.currentClaudeProcess && !this.currentClaudeProcess.killed) {
           this.outputChannel.appendLine(`[WARNING] Killing hanging process`);
           claudeProcess.kill();
-          this.webviewProtocol?.post('error/show', {
+          this.postWithDispatch('error/show', {
             message:
               'Claude process timed out after 10 minutes. This might indicate an authentication issue or the CLI is waiting for input.',
           });
@@ -678,7 +979,7 @@ export class ExtensionMessageHandler {
         if ('path' in error) {
           this.outputChannel.appendLine(`[ERROR] Error path: ${error.path}`);
         }
-        this.webviewProtocol?.post('error/show', {
+        this.postWithDispatch('error/show', {
           message: `Failed to start Claude: ${error.message}. Make sure Claude CLI is installed and available in PATH.`,
         });
       });
@@ -709,7 +1010,7 @@ export class ExtensionMessageHandler {
           const toolName = match ? match[1] : 'unknown';
 
           // Send permission request to UI
-          this.webviewProtocol?.post('permission/request', {
+          this.postWithDispatch('permission/request', {
             toolName: toolName,
             toolId: `perm_${Date.now()}`,
             toolInput: chunkStr,
@@ -771,7 +1072,7 @@ export class ExtensionMessageHandler {
         this.outputChannel.appendLine(`[DEBUG] Message sent and stdin closed`);
       } else {
         this.outputChannel.appendLine(`[ERROR] No stdin available`);
-        this.webviewProtocol?.post('error/show', {
+        this.postWithDispatch('error/show', {
           message: 'Failed to communicate with Claude: no stdin available',
         });
         return;
@@ -902,7 +1203,7 @@ export class ExtensionMessageHandler {
           this.logger.info('ExtensionMessageHandler', 'Process aborted by user');
 
           // Update UI to show stopped state without error
-          this.webviewProtocol?.post('status/processing', false);
+          this.postWithDispatch('status/processing', false);
           // TODO: Test no error shown on manual abort
 
           // Don't show error message for user-initiated abort
@@ -920,22 +1221,22 @@ export class ExtensionMessageHandler {
               stderrData.includes('Invalid API key') ||
               stderrData.includes('ANTHROPIC_API_KEY')
             ) {
-              this.webviewProtocol?.post('error/show', {
+              this.postWithDispatch('error/show', {
                 message:
                   'Invalid or missing API key. Either set ANTHROPIC_API_KEY environment variable or ensure you have an active Claude Pro/Team subscription.',
               });
             } else if (stderrData.includes('not authenticated') || stderrData.includes('login')) {
-              this.webviewProtocol?.post('error/show', {
+              this.postWithDispatch('error/show', {
                 message:
                   'Not authenticated. Please run "claude login" in your terminal to authenticate with your Claude Pro/Team account.',
               });
             } else {
-              this.webviewProtocol?.post('error/show', {
+              this.postWithDispatch('error/show', {
                 message: `Claude error: ${stderrData}`,
               });
             }
           } else {
-            this.webviewProtocol?.post('error/show', {
+            this.postWithDispatch('error/show', {
               message: `Claude exited with code ${code}. Please ensure Claude CLI is installed and you either have ANTHROPIC_API_KEY set or are logged in with "claude login".`,
             });
           }
@@ -957,8 +1258,12 @@ export class ExtensionMessageHandler {
           );
           for (const toolId of this.pendingToolIds) {
             this.outputChannel.appendLine(`[Process Exit] Sending timeout for tool: ${toolId}`);
+            
+            // Complete tool tracking with timeout
+            this.toolTracker.timeoutToolExecution(toolId);
+            
             // Send a timeout/no-response status for tools that didn't receive results
-            this.webviewProtocol?.post('message/toolResult', {
+            this.postWithDispatch('message/toolResult', {
               toolId: toolId,
               result: '(No response received)',
               isError: true,
@@ -970,9 +1275,9 @@ export class ExtensionMessageHandler {
         }
 
         // Always send completion message and set processing to false
-        this.webviewProtocol?.post('chat/messageComplete', {});
+        this.postWithDispatch('chat/messageComplete', {});
 
-        this.webviewProtocol?.post('status/processing', false);
+        this.postWithDispatch('status/processing', false);
         this.outputChannel.appendLine(`[DEBUG] Set processing status to false`);
 
         // Reset message creation flags for next message
@@ -981,6 +1286,12 @@ export class ExtensionMessageHandler {
         this.thinkingMessageId = null;
         this.isFirstTextBlock = true; // Reset for next message
         this.hasSeenToolUse = false; // Reset tool tracking
+        
+        // End session tracking for completed conversation
+        const currentSessionId = this.getCurrentSessionId();
+        if (currentSessionId) {
+          this.toolTracker.endSession(currentSessionId);
+        }
 
         // Clean up process references
         this.currentClaudeProcess = null;
@@ -991,16 +1302,16 @@ export class ExtensionMessageHandler {
       if (this.currentAbortController?.signal.aborted || error.message?.includes('aborted')) {
         this.outputChannel.appendLine(`[Stop] Operation aborted`);
         this.logger.info('ExtensionMessageHandler', 'Operation aborted by user');
-        this.webviewProtocol?.post('status/processing', false);
+        this.postWithDispatch('status/processing', false);
         return;
       }
 
       this.logger.error('ExtensionMessageHandler', 'Error handling chat message', error);
-      this.webviewProtocol?.post('error/show', {
+      this.postWithDispatch('error/show', {
         message: `Failed to send message: ${error.message || error}`,
       });
       // Set processing to false on error
-      this.webviewProtocol?.post('status/processing', false);
+      this.postWithDispatch('status/processing', false);
     }
   }
 
@@ -1052,8 +1363,8 @@ export class ExtensionMessageHandler {
           );
           // Store the session ID for future messages
           if (json.session_id) {
-            this.currentSessionId = json.session_id;
-            this.outputChannel.appendLine(`[DEBUG] Stored session ID: ${this.currentSessionId}`);
+            this.setCurrentSessionId(json.session_id);
+            this.outputChannel.appendLine(`[DEBUG] Stored session ID: ${json.session_id}`);
           }
 
           // Handle MCP server status
@@ -1088,7 +1399,7 @@ export class ExtensionMessageHandler {
             });
 
             // Send MCP server status to UI with tool counts
-            this.webviewProtocol?.post('mcp/status', {
+            this.postWithDispatch('mcp/status', {
               servers: serversWithCounts,
             });
           }
@@ -1158,7 +1469,7 @@ export class ExtensionMessageHandler {
                   json.message?.id
                 ) {
                   this.currentAssistantMessageId = json.message.id;
-                  this.webviewProtocol?.post('message/update', {
+                  this.postWithDispatch('message/update', {
                     role: 'assistant',
                     messageId: json.message.id,
                   });
@@ -1180,7 +1491,7 @@ export class ExtensionMessageHandler {
                       );
 
                       // Send plan to UI for approval
-                      this.webviewProtocol?.post('message/planProposal', {
+                      this.postWithDispatch('message/planProposal', {
                         plan: planData,
                         messageId: json.message?.id,
                       });
@@ -1205,7 +1516,7 @@ export class ExtensionMessageHandler {
                       );
 
                       // Send plan to UI for approval
-                      this.webviewProtocol?.post('message/planProposal', {
+                      this.postWithDispatch('message/planProposal', {
                         plan: planData,
                         messageId: json.message?.id,
                       });
@@ -1233,7 +1544,7 @@ export class ExtensionMessageHandler {
                   this.waitingForPlan = false;
 
                   // Send the plan content to UI with special formatting
-                  this.webviewProtocol?.post('message/planProposal', {
+                  this.postWithDispatch('message/planProposal', {
                     plan: block.text,
                     messageId: json.message?.id,
                     isMarkdown: true,
@@ -1245,7 +1556,7 @@ export class ExtensionMessageHandler {
                   const newMessageId = json.message?.id
                     ? `${json.message.id}_${Date.now()}`
                     : `msg_${Date.now()}`;
-                  this.webviewProtocol.post('message/add', {
+                  this.postWithDispatch('message/add', {
                     role: 'assistant',
                     content: block.text,
                     messageId: newMessageId,
@@ -1275,7 +1586,7 @@ export class ExtensionMessageHandler {
 
                   // Create the message with thinking
                   if (this.webviewProtocol) {
-                    this.webviewProtocol.post('message/add', {
+                    this.postWithDispatch('message/add', {
                       role: 'assistant',
                       content: '',
                       messageId: messageId,
@@ -1317,7 +1628,7 @@ export class ExtensionMessageHandler {
                   this.outputChannel.appendLine(
                     `[DEBUG] Sending incremental thinking update to UI with messageId: ${this.thinkingMessageId}`
                   );
-                  this.webviewProtocol.post('message/thinking', {
+                  this.postWithDispatch('message/thinking', {
                     content: newThinkingContent, // Send only new content
                     currentLine: this.latestThinkingLine,
                     isActive: true,
@@ -1345,12 +1656,22 @@ export class ExtensionMessageHandler {
                 this.outputChannel.appendLine(
                   `[JSON] Added ${block.id} to pending tools. Total pending: ${this.pendingToolIds.size}`
                 );
+                
+                // Start comprehensive tool tracking
+                this.toolTracker.startToolExecution(
+                  block.id,
+                  block.name,
+                  block.input,
+                  this.getCurrentSessionId() || undefined,
+                  this.currentAssistantMessageId || undefined,
+                  json.parent_tool_use_id
+                );
 
                 // Tools attach to the current conversation flow
                 // If no message exists yet, create one for the tools
                 if (!this.hasCreatedAssistantMessage) {
                   const messageId = `tools_${Date.now()}`;
-                  this.webviewProtocol?.post('message/add', {
+                  this.postWithDispatch('message/add', {
                     role: 'assistant',
                     content: '', // Empty content - tools will show
                     messageId: messageId,
@@ -1363,7 +1684,7 @@ export class ExtensionMessageHandler {
                 this.outputChannel.appendLine(
                   `[JSON] Sending tool use to UI: ${block.name} (${block.id}) with status: calling`
                 );
-                this.webviewProtocol?.post('message/toolUse', {
+                this.postWithDispatch('message/toolUse', {
                   toolName: block.name,
                   toolId: block.id,
                   input: block.input,
@@ -1387,7 +1708,7 @@ export class ExtensionMessageHandler {
                   this.outputChannel.appendLine(`[JSON] Detected plan response (string format)`);
 
                   // Send plan to UI for approval
-                  this.webviewProtocol?.post('message/planProposal', {
+                  this.postWithDispatch('message/planProposal', {
                     plan: planData,
                     messageId: json.message?.id,
                   });
@@ -1405,7 +1726,7 @@ export class ExtensionMessageHandler {
             if (this.webviewProtocol) {
               // Always create a new message for each text block
               const newMessageId = `${json.message?.id || 'msg'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-              this.webviewProtocol.post('message/add', {
+              this.postWithDispatch('message/add', {
                 role: 'assistant',
                 content: json.message.content,
                 messageId: newMessageId,
@@ -1429,7 +1750,7 @@ export class ExtensionMessageHandler {
           );
 
           // Send token usage update to UI
-          this.webviewProtocol?.post('message/tokenUsage', {
+          this.postWithDispatch('message/tokenUsage', {
             inputTokens: json.message.usage.input_tokens,
             outputTokens: json.message.usage.output_tokens,
             cacheTokens:
@@ -1492,12 +1813,20 @@ export class ExtensionMessageHandler {
               this.outputChannel.appendLine(
                 `[JSON] Tool ${block.tool_use_id} was in pending: ${wasInPending}, remaining pending: ${this.pendingToolIds.size}`
               );
+              
+              // Complete comprehensive tool tracking
+              this.toolTracker.completeToolExecution(
+                block.tool_use_id,
+                resultText,
+                block.is_error || false,
+                'complete'
+              );
 
               // Send tool result update to UI
               this.outputChannel.appendLine(
                 `[JSON] Sending tool result to UI for ${block.tool_use_id} with status: complete`
               );
-              this.webviewProtocol?.post('message/toolResult', {
+              this.postWithDispatch('message/toolResult', {
                 toolId: block.tool_use_id,
                 result: resultText,
                 isError: block.is_error || false,
@@ -1516,7 +1845,7 @@ export class ExtensionMessageHandler {
         onMetadata({ totalCost: json.total_cost_usd });
 
         if (json.is_error && json.subtype) {
-          this.webviewProtocol?.post('error/show', {
+          this.postWithDispatch('error/show', {
             message: `Claude error: ${json.subtype}`,
           });
         }
@@ -1527,7 +1856,7 @@ export class ExtensionMessageHandler {
           this.waitingForPlan = true;
 
           // Send completion first
-          this.webviewProtocol?.post('chat/messageComplete', {
+          this.postWithDispatch('chat/messageComplete', {
             sessionId: json.session_id,
             totalCost: json.total_cost_usd,
             duration: json.duration_ms,
@@ -1550,7 +1879,7 @@ export class ExtensionMessageHandler {
             `[DEBUG] Result contains thinking tokens: ${json.usage.thinking_tokens}`
           );
           // Send final token usage update with thinking tokens
-          this.webviewProtocol?.post('message/tokenUsage', {
+          this.postWithDispatch('message/tokenUsage', {
             inputTokens: json.usage.input_tokens || 0,
             outputTokens: json.usage.output_tokens || 0,
             cacheTokens:
@@ -1568,7 +1897,7 @@ export class ExtensionMessageHandler {
           );
 
           // Send final thinking update with duration and accumulated content
-          this.webviewProtocol?.post('message/thinking', {
+          this.postWithDispatch('message/thinking', {
             content: this.accumulatedThinking,
             currentLine: this.latestThinkingLine,
             isActive: false,
@@ -1584,7 +1913,7 @@ export class ExtensionMessageHandler {
         }
 
         // Send completion message
-        this.webviewProtocol?.post('chat/messageComplete', {
+        this.postWithDispatch('chat/messageComplete', {
           sessionId: json.session_id,
           totalCost: json.total_cost_usd,
           duration: json.duration_ms,
@@ -1776,7 +2105,7 @@ export class ExtensionMessageHandler {
             this.outputChannel.appendLine(`  - Error: ${json.is_error}`);
 
             if (json.is_error && json.subtype) {
-              this.webviewProtocol?.post('error/show', {
+              this.postWithDispatch('error/show', {
                 message: `Claude error: ${json.subtype}`,
               });
             }
@@ -1784,7 +2113,7 @@ export class ExtensionMessageHandler {
             onMetadata({ totalCost: json.total_cost_usd });
 
             // Send completion with metadata
-            this.webviewProtocol?.post('chat/messageComplete', {
+            this.postWithDispatch('chat/messageComplete', {
               sessionId: json.session_id,
               totalCost: json.total_cost_usd,
               duration: json.duration_ms,
@@ -1817,21 +2146,22 @@ export class ExtensionMessageHandler {
   private async handleSlashCommand(command: string): Promise<void> {
     this.outputChannel.appendLine(`\n[Slash Command] Executing: ${command}`);
 
-    // Send the command to UI first
-    if (this.webviewProtocol) {
-      this.webviewProtocol.post('message/add', {
-        role: 'user',
-        content: command,
-      });
+    // Send the command to UI first with dual dispatch
+    this.postWithDispatch('message/add', {
+      role: 'user',
+      content: command,
+      messageId: this.generateMessageId(),
+      timestamp: new Date().toISOString()
+    });
 
-      // Send a message about opening terminal
-      this.webviewProtocol.post('message/add', {
-        role: 'assistant',
-        content: `Opening terminal to execute ${command}. Check the terminal for output.`,
-      });
+    // Send a message about opening terminal
+    this.postWithDispatch('message/add', {
+      role: 'assistant',
+      content: `Opening terminal to execute ${command}. Check the terminal for output.`,
+      messageId: this.generateMessageId(),
+    });
 
-      this.webviewProtocol.post('status/processing', false);
-    }
+    this.postWithDispatch('status/processing', false);
 
     // Get workspace folder for cwd
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1844,9 +2174,10 @@ export class ExtensionMessageHandler {
     const args = [command];
 
     // Add session resume if we have a current session
-    if (this.currentSessionId) {
-      args.push('--resume', this.currentSessionId);
-      this.outputChannel.appendLine(`[Slash Command] Resuming session: ${this.currentSessionId}`);
+    const currentSessionId = this.getCurrentSessionId();
+    if (currentSessionId) {
+      args.push('--resume', currentSessionId);
+      this.outputChannel.appendLine(`[Slash Command] Resuming session: ${currentSessionId}`);
     }
 
     // Create terminal with the claude command
@@ -1865,11 +2196,9 @@ export class ExtensionMessageHandler {
     );
 
     // Send terminal opened message to UI
-    if (this.webviewProtocol) {
-      this.webviewProtocol.post('terminal/opened', {
-        message: `Executing ${command} command in terminal. Check the terminal output and return when ready.`,
-      });
-    }
+    this.postWithDispatch('terminal/opened', {
+      message: `Executing ${command} command in terminal. Check the terminal output and return when ready.`,
+    });
 
     this.outputChannel.appendLine(`[Slash Command] Terminal opened for ${command}`);
   }
@@ -1890,7 +2219,7 @@ export class ExtensionMessageHandler {
 
       if (mergedServers.length === 0) {
         this.outputChannel.appendLine(`[MCP] No MCP servers configured in any scope`);
-        this.webviewProtocol?.post('mcp/status', { servers: [] });
+        this.postWithDispatch('mcp/status', { servers: [] });
         return;
       }
 
@@ -1968,11 +2297,11 @@ export class ExtensionMessageHandler {
       }
 
       // Send all servers to UI with resource counts
-      this.webviewProtocol?.post('mcp/status', { servers });
+      this.postWithDispatch('mcp/status', { servers });
     } catch (error) {
       this.logger.error('ExtensionMessageHandler', 'Failed to load MCP servers', error as Error);
       this.outputChannel.appendLine(`[MCP] Error loading servers: ${error}`);
-      this.webviewProtocol?.post('mcp/status', { servers: [] });
+      this.postWithDispatch('mcp/status', { servers: [] });
     }
   }
 
@@ -2072,7 +2401,7 @@ export class ExtensionMessageHandler {
         const planData = JSON.parse(Buffer.from(content).toString());
 
         // Show plan in UI
-        this.webviewProtocol?.post('message/planProposal', {
+        this.postWithDispatch('message/planProposal', {
           plan: planData.plan,
           sessionId: planData.session_id,
           isMarkdown: true,
