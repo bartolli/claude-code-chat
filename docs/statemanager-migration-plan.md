@@ -205,12 +205,13 @@ Migrate from SimpleStateManager to the full Redux-based StateManager to gain per
   // - Need more work on complex stream processing tests
   // Note: Full coverage requires integration tests due to complexity
   ```
-- [ ] **2.0.3** Document current message flow
+- [x] **2.0.3** Document current message flow ✅
   ```typescript
-  // Update messageTypes.documentation.ts with:
-  // - Exact payload structures from real usage
-  // - Message sequences (e.g., start → stream → complete)
-  // - Error handling flows
+  // Updated messageTypes.documentation.ts with:
+  // - Complete webview→backend message types from handleMessage()
+  // - All backend→webview posts from ExtensionMessageHandler
+  // - Message flow sequences for common operations
+  // - Critical state transitions during processing
   ```
 
 ### Task 2.1: Read-Only StateManager Integration

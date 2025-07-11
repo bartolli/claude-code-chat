@@ -1,6 +1,9 @@
 /**
  * Complete documentation of all webview ↔ backend message types
  * This serves as the source of truth for the migration
+ * 
+ * Updated based on ExtensionMessageHandler analysis (Phase 2.0.3)
+ * Last updated: Phase 2 - StateManager migration
  */
 
 export interface WebviewMessage {
@@ -16,205 +19,157 @@ export interface WebviewMessage {
 
 /**
  * Messages sent FROM webview TO backend
+ * Based on ExtensionMessageHandler.handleMessage() switch cases
  */
 export const WEBVIEW_TO_BACKEND_MESSAGES = {
   // Chat operations
   'chat/sendMessage': {
     description: 'User sends a message',
     payload: { text: 'string', sessionId: 'string | undefined' },
+    handler: 'handleChatMessage',
   },
-  'chat/stop': {
-    description: 'User stops Claude response',
+  'chat/newSession': {
+    description: 'Start new chat session',
     payload: { sessionId: 'string' },
+    handler: 'returns { sessionId }',
   },
-  'chat/retry': {
-    description: 'User retries last message',
-    payload: { sessionId: 'string' },
-  },
-
-  // Session management
-  'session/select': {
-    description: 'User selects a session',
-    payload: { sessionId: 'string' },
-  },
-  'session/create': {
-    description: 'User creates new session',
-    payload: { title: 'string | undefined' },
-  },
-  'session/delete': {
-    description: 'User deletes a session',
-    payload: { sessionId: 'string' },
-  },
-  'session/clear': {
-    description: 'User clears current session',
+  'chat/stopRequest': {
+    description: 'Stop current Claude process',
     payload: {},
+    handler: 'kills process or sends ESC',
   },
 
-  // UI interactions
-  'ui/ready': {
-    description: 'Webview signals ready state',
+  // Settings and configuration
+  'settings/get': {
+    description: 'Get current settings',
     payload: {},
+    handler: 'returns globalState settings',
   },
-  'ui/toolExpanded': {
-    description: 'User expands/collapses tool',
-    payload: { toolId: 'string', expanded: 'boolean' },
-  },
-  'ui/thinkingToggled': {
-    description: 'User toggles thinking visibility',
-    payload: { visible: 'boolean' },
-  },
-
-  // Settings
-  'settings/modelChanged': {
-    description: 'User changes model selection',
-    payload: { model: 'string' },
-  },
-  'settings/updated': {
-    description: 'User updates settings',
+  'settings/update': {
+    description: 'Update settings',
     payload: { settings: 'object' },
+    handler: 'updates globalState',
+  },
+  'settings/selectModel': {
+    description: 'Select Claude model',
+    payload: { model: 'string' },
+    handler: 'updates selectedModel',
+  },
+
+  // Conversation management
+  'conversation/getList': {
+    description: 'Get conversation list',
+    payload: {},
+    handler: 'returns conversation array',
+  },
+
+  // MCP (Model Context Protocol)
+  'mcp/getServers': {
+    description: 'Get MCP server list',
+    payload: {},
+    handler: 'returns { servers: McpServer[] }',
   },
 
   // Permissions
   'permission/response': {
     description: 'User responds to permission request',
-    payload: { granted: 'boolean', permissions: 'array' },
+    payload: { permissionId: 'string', response: 'allow' | 'deny' },
+    handler: 'resolves pending permission',
   },
+
+  // Plan mode
+  'plan/approve': {
+    description: 'Approve proposed plan',
+    payload: {},
+    handler: 'exits plan mode and continues',
+  },
+  'plan/refine': {
+    description: 'Request plan refinement',
+    payload: { feedback: 'string | undefined' },
+    handler: 'sends feedback to Claude',
+  },
+
 };
 
 /**
  * Messages sent FROM backend TO webview
+ * Based on webviewProtocol.post() calls in ExtensionMessageHandler
  */
 export const BACKEND_TO_WEBVIEW_MESSAGES = {
-  // Session messages (Redux actions)
-  'session/messageAdded': {
-    description: 'New message added to session',
-    reduxAction: 'messageAdded',
-    payload: { sessionId: 'string', message: 'Message' },
+  // Message lifecycle operations
+  'message/add': {
+    description: 'Add new message (user/assistant)',
+    payload: { role: 'user' | 'assistant', content: 'string', messageId: 'string', timestamp: 'string' },
+    frequency: 'high',
   },
-  'session/messageUpdated': {
-    description: 'Message content updated',
-    reduxAction: 'messageUpdated',
-    payload: { sessionId: 'string', messageId: 'string', updates: 'Partial<Message>' },
+  'message/update': {
+    description: 'Update existing message content',
+    payload: { messageId: 'string', content: 'string' },
+    frequency: 'high - during streaming',
   },
-  'session/messageCompleted': {
-    description: 'Message marked as complete',
-    reduxAction: 'messageCompleted',
-    payload: { sessionId: 'string', messageId: 'string' },
+  'message/thinking': {
+    description: 'Update thinking block',
+    payload: { messageId: 'string', content: 'string', duration: 'number' },
+    frequency: 'high - during thinking',
   },
-  'session/thinkingUpdated': {
-    description: 'Thinking block updated',
-    reduxAction: 'thinkingUpdated',
-    payload: { sessionId: 'string', messageId: 'string', thinking: 'ThinkingContent' },
+  'message/toolUse': {
+    description: 'Tool usage notification',
+    payload: { messageId: 'string', toolUse: 'ToolUse' },
+    frequency: 'medium',
   },
-  'session/toolUseAdded': {
-    description: 'Tool use added',
-    reduxAction: 'toolUseAdded',
-    payload: { sessionId: 'string', messageId: 'string', toolUse: 'ToolUse' },
+  'message/toolResult': {
+    description: 'Tool execution results',
+    payload: { messageId: 'string', toolUseId: 'string', result: 'any' },
+    frequency: 'medium',
   },
-  'session/toolResultAdded': {
-    description: 'Tool result added',
-    reduxAction: 'toolResultAdded',
-    payload: {
-      sessionId: 'string',
-      messageId: 'string',
-      toolUseId: 'string',
-      result: 'ToolResult',
-    },
+  'message/planProposal': {
+    description: 'Plan mode proposals',
+    payload: { messageId: 'string', plan: 'object' },
+    frequency: 'low - plan mode only',
   },
-  'session/tokenUsageUpdated': {
-    description: 'Token usage updated',
-    reduxAction: 'tokenUsageUpdated',
-    payload: { sessionId: 'string', usage: 'TokenUsage' },
+  'message/tokenUsage': {
+    description: 'Token usage stats',
+    payload: { inputTokens: 'number', outputTokens: 'number' },
+    frequency: 'once per message',
   },
 
-  // Non-Redux session messages (need mapping)
-  'session/messageAppended': {
-    description: 'Content appended to current message',
-    reduxAction: null,
-    customHandler: 'appendToMessage',
-    payload: { content: 'string' },
+  // Status and control
+  'status/processing': {
+    description: 'Toggle processing state',
+    payload: 'boolean',
+    frequency: 'high',
   },
-  'session/tokensUpdated': {
-    description: 'Legacy token update',
-    reduxAction: 'updateTokenUsage',
-    payload: { input: 'number', output: 'number' },
-  },
-  'session/resumed': {
-    description: 'Session resumed',
-    reduxAction: 'setCurrentSession',
-    payload: { sessionId: 'string' },
-  },
-  'session/cleared': {
-    description: 'Session cleared',
-    reduxAction: 'clearSession',
+  'chat/messageComplete': {
+    description: 'Signal message completion',
     payload: {},
+    frequency: 'once per message',
   },
-  'session/modelSelected': {
-    description: 'Model selected',
-    reduxAction: null,
-    customHandler: 'updateConfig',
-    payload: { model: 'string' },
+  'planMode/toggle': {
+    description: 'Toggle plan mode',
+    payload: 'boolean',
+    frequency: 'low',
   },
-
-  // UI messages (Redux actions)
-  'ui/showPermissionRequest': {
-    description: 'Show permission dialog',
-    reduxAction: 'showPermissionRequest',
-    payload: { request: 'PermissionRequest' },
-  },
-  'claude/setProcessing': {
-    description: 'Set Claude processing state',
-    reduxAction: 'setProcessing',
-    payload: { processing: 'boolean' },
-  },
-
-  // Non-Redux UI messages (need custom handling)
-  'ui/setReady': {
-    description: 'Set webview ready state',
-    reduxAction: 'setWebviewReady',
-    payload: { ready: 'boolean' },
-  },
-  'ui/showError': {
-    description: 'Show error message',
-    reduxAction: null,
-    customHandler: 'showError',
+  'error/show': {
+    description: 'Display errors',
     payload: { message: 'string', details: 'string | undefined' },
-  },
-  'ui/showNotification': {
-    description: 'Show notification',
-    reduxAction: null,
-    customHandler: 'showNotification',
-    payload: { message: 'string', type: 'info' | 'warning' | 'error' },
-  },
-  'ui/showPlanProposal': {
-    description: 'Show plan proposal',
-    reduxAction: null,
-    customHandler: 'showPlanProposal',
-    payload: { plan: 'object' },
+    frequency: 'on errors',
   },
 
-  // Stream messages (need custom handling)
-  'stream/messageReceived': {
-    description: 'Handle Claude stream chunk',
-    reduxAction: null,
-    customHandler: 'processStreamChunk',
-    payload: { chunk: 'StreamChunk' },
+  // Other operations
+  'permission/request': {
+    description: 'Request user permission',
+    payload: { permissionId: 'string', message: 'string', permissions: 'array' },
+    frequency: 'as needed',
   },
-
-  // Config messages (need custom handling)
-  'config/initializeConfig': {
-    description: 'Initialize configuration',
-    reduxAction: null,
-    customHandler: 'initializeConfig',
-    payload: { config: 'Config' },
-  },
-
-  // MCP messages (need custom handling)
-  'mcp/updateConnectedServers': {
-    description: 'Update MCP server status',
-    reduxAction: null,
-    customHandler: 'updateMcpServers',
+  'mcp/status': {
+    description: 'MCP server status',
     payload: { servers: 'McpServer[]' },
+    frequency: 'on change',
+  },
+  'terminal/opened': {
+    description: 'Terminal opened notification',
+    payload: { terminalId: 'string' },
+    frequency: 'on terminal open',
   },
 };
 
@@ -302,3 +257,79 @@ export const STATE_SYNC_STRATEGIES: StateSyncStrategy[] = [
   { stateField: 'claude.processing', syncToWebview: true, syncFromWebview: false },
   { stateField: 'config.selectedModel', syncToWebview: true, syncFromWebview: true },
 ];
+
+/**
+ * Message flow sequences for common operations
+ * Based on ExtensionMessageHandler stream processing
+ */
+export const MESSAGE_FLOW_SEQUENCES = {
+  // User sends a message
+  userMessage: [
+    '→ chat/sendMessage',
+    '← message/add (role: user)',
+    '← status/processing (true)',
+    '← message/add (role: assistant, empty)',
+    '← message/thinking (multiple updates)',
+    '← message/update (content chunks)',
+    '← message/toolUse (if tools used)',
+    '← message/toolResult (tool results)',
+    '← message/tokenUsage',
+    '← chat/messageComplete',
+    '← status/processing (false)',
+  ],
+
+  // Error during processing
+  errorFlow: [
+    '→ chat/sendMessage',
+    '← message/add (role: user)',
+    '← status/processing (true)',
+    '← error/show',
+    '← status/processing (false)',
+  ],
+
+  // Plan mode interaction
+  planModeFlow: [
+    '← message/planProposal',
+    '→ plan/approve OR plan/refine',
+    '← planMode/toggle (false)',
+    '← message/add (continue with plan)',
+  ],
+
+  // Permission request
+  permissionFlow: [
+    '← permission/request',
+    '→ permission/response',
+    '(continues with operation)',
+  ],
+
+  // Stop request
+  stopFlow: [
+    '→ chat/stopRequest',
+    '← status/processing (false)',
+  ],
+};
+
+/**
+ * Critical state transitions during message processing
+ */
+export const STATE_TRANSITIONS = {
+  messageStart: {
+    before: { processing: false, currentAssistantMessageId: null },
+    after: { processing: true, currentAssistantMessageId: 'new-id' },
+  },
+  
+  thinkingStart: {
+    before: { thinkingMessageId: null, accumulatedThinking: '' },
+    after: { thinkingMessageId: 'thinking-id', thinkingStartTime: 'timestamp' },
+  },
+  
+  toolUseStart: {
+    before: { hasSeenToolUse: false, pendingToolIds: [] },
+    after: { hasSeenToolUse: true, pendingToolIds: ['tool-id'] },
+  },
+  
+  messageComplete: {
+    before: { processing: true, hasCreatedAssistantMessage: true },
+    after: { processing: false, currentAssistantMessageId: null },
+  },
+};
