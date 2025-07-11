@@ -5,6 +5,7 @@ node_modules
 *.vsix
 backup
 .claude-trace/
+logs/
 
 # Reference code from other projects (not part of this codebase)
 gui/

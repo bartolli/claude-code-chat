@@ -10518,5 +10518,37 @@
       "command": "git add -A",
       "description": "Stage changes"
     }
+  },
+  {
+    "session_id": "b5573b88-8d62-4eea-8ef1-5e443f18bb81",
+    "transcript_path": "/Users/bartolli/.claude/projects/-Users-bartolli-Projects-claude-extension-claude-code-chat/b5573b88-8d62-4eea-8ef1-5e443f18bb81.jsonl",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "git commit -m \"docs: Complete Phase 2.0.3 - Document message flow patterns\"",
+      "description": "Commit with simple message"
+    }
+  },
+  {
+    "session_id": "b5573b88-8d62-4eea-8ef1-5e443f18bb81",
+    "transcript_path": "/Users/bartolli/.claude/projects/-Users-bartolli-Projects-claude-extension-claude-code-chat/b5573b88-8d62-4eea-8ef1-5e443f18bb81.jsonl",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+      "file_path": "/Users/bartolli/Projects/claude-extension/claude-code-chat/docs/statemanager-migration-plan.md",
+      "offset": 215,
+      "limit": 40
+    }
+  },
+  {
+    "session_id": "b5573b88-8d62-4eea-8ef1-5e443f18bb81",
+    "transcript_path": "/Users/bartolli/.claude/projects/-Users-bartolli-Projects-claude-extension-claude-code-chat/b5573b88-8d62-4eea-8ef1-5e443f18bb81.jsonl",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+      "file_path": "/Users/bartolli/Projects/claude-extension/claude-code-chat/src/services/ExtensionMessageHandler.ts",
+      "offset": 45,
+      "limit": 30
+    }
   }
 ]
