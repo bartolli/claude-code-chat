@@ -1,5 +1,6 @@
 import { Logger } from '../core/Logger';
 import * as vscode from 'vscode';
+import { SyncPerformanceMonitor } from './SyncPerformanceMonitor';
 
 /**
  * Metadata attached to sync operations to track source and prevent loops
@@ -77,6 +78,7 @@ export class StateSynchronizer {
   private loopPatterns = new Map<string, LoopPattern>();
   private logger: Logger;
   private outputChannel: vscode.OutputChannel;
+  private performanceMonitor: SyncPerformanceMonitor;
   
   // Known loop-prone message sequences
   private readonly KNOWN_LOOP_PATTERNS: LoopPattern[] = [
@@ -103,6 +105,7 @@ export class StateSynchronizer {
   constructor(logger: Logger) {
     this.logger = logger;
     this.outputChannel = vscode.window.createOutputChannel('Claude Code - State Sync');
+    this.performanceMonitor = new SyncPerformanceMonitor(logger);
     
     // Initialize known patterns
     this.KNOWN_LOOP_PATTERNS.forEach(pattern => {
@@ -201,6 +204,15 @@ export class StateSynchronizer {
     this.activeSyncOperations.delete(context.operationId);
 
     const duration = performance.now() - context.startTime;
+    
+    // Track performance metrics
+    this.performanceMonitor.recordSync(
+      context.messageType,
+      'toWebview',
+      duration,
+      false // no error
+    );
+    
     this.logger.debug('StateSynchronizer', `Completed sync to webview: ${context.messageType}`, {
       operationId: context.operationId,
       duration: `${duration.toFixed(2)}ms`,
@@ -254,6 +266,15 @@ export class StateSynchronizer {
     this.activeSyncOperations.delete(context.operationId);
 
     const duration = performance.now() - context.startTime;
+    
+    // Track performance metrics
+    this.performanceMonitor.recordSync(
+      context.messageType,
+      'fromWebview',
+      duration,
+      false // no error
+    );
+    
     this.logger.debug('StateSynchronizer', `Completed sync from webview: ${context.messageType}`, {
       operationId: context.operationId,
       duration: `${duration.toFixed(2)}ms`,
@@ -265,6 +286,20 @@ export class StateSynchronizer {
    */
   isSyncing(): boolean {
     return this.syncingToWebview || this.syncingFromWebview;
+  }
+
+  /**
+   * Get performance metrics
+   */
+  getPerformanceMetrics() {
+    return this.performanceMonitor.exportMetrics();
+  }
+
+  /**
+   * Reset performance metrics
+   */
+  resetPerformanceMetrics(): void {
+    this.performanceMonitor.reset();
   }
 
   /**
@@ -514,6 +549,13 @@ export class StateSynchronizer {
       const contentHash = this.generateContentHash(messageType, payload);
       if (this.isDuplicateContent(contentHash)) {
         this.logger.debug('StateSynchronizer', `Skipping duplicate content for ${messageType}`);
+        // Track blocked sync due to duplicate
+        this.performanceMonitor.recordSync(
+          messageType,
+          direction === 'toWebview' ? 'toWebview' : 'fromWebview',
+          0, // No duration for blocked sync
+          true // Error/blocked
+        );
         return true;
       }
       this.trackContentHash(contentHash);
@@ -523,6 +565,13 @@ export class StateSynchronizer {
     const loopPattern = this.detectLoopPattern(messageType);
     if (loopPattern && loopPattern.occurrences >= 3) {
       this.logger.warn('StateSynchronizer', `Blocking sync due to loop pattern: ${loopPattern.id}`);
+      // Track blocked sync due to loop pattern
+      this.performanceMonitor.recordSync(
+        messageType,
+        direction === 'toWebview' ? 'toWebview' : 'fromWebview',
+        0, // No duration for blocked sync
+        true // Error/blocked
+      );
       return true;
     }
     

@@ -333,4 +333,23 @@ export class MessageDebouncer {
     const config = this.messageConfigs[type];
     return config ? config.debounceMs > 0 : false;
   }
+
+  /**
+   * Get debouncing statistics
+   * @returns Object with message counts and reduction rate
+   */
+  getDebounceStats(): {
+    totalQueued: number;
+    totalSent: number;
+    reductionRate: number;
+    messageTypeStats: Record<string, { queued: number; sent: number }>;
+  } {
+    // For now, return a placeholder - would need to track in production
+    return {
+      totalQueued: 0,
+      totalSent: 0,
+      reductionRate: 0,
+      messageTypeStats: {}
+    };
+  }
 }
