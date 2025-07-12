@@ -16,6 +16,8 @@ import { setWebviewReady, setClaudeRunning, showPermissionRequest } from '../sta
 import { setProcessing, setError as setClaudeError } from '../state/slices/claudeSlice';
 import { setSelectedModel } from '../state/slices/configSlice';
 import { AnyAction, ActionCreator } from '@reduxjs/toolkit';
+import { withSyncMetadata, SyncAwareAction } from './syncMiddleware';
+import { SyncMetadata } from './StateSynchronizer';
 
 /**
  * @todo Phase 2: Complete stream message handling integration with ExtensionMessageHandler
@@ -31,6 +33,8 @@ export interface WebviewAction {
   type: string;
   /** Optional action payload data */
   payload?: unknown;
+  /** Optional sync metadata for loop prevention */
+  syncMetadata?: Partial<SyncMetadata>;
 }
 
 /**
@@ -276,9 +280,10 @@ export class ActionMapper {
   /**
    * Map a webview action to Redux action
    * @param action The webview action to map
+   * @param syncMetadata Optional sync metadata to attach to the Redux action
    * @returns Result of action processing
    */
-  mapAction(action: WebviewAction): ActionProcessingResult {
+  mapAction(action: WebviewAction, syncMetadata?: Partial<SyncMetadata>): ActionProcessingResult {
     if (!this.featureFlags.isEnabled('enableActionMapping')) {
       return { success: false, error: 'Action mapping disabled' };
     }
@@ -307,8 +312,13 @@ export class ActionMapper {
       }
 
       if (mappedAction) {
-        this.logAction(action, { success: true, mappedAction });
-        return { success: true, mappedAction };
+        // Add sync metadata if provided
+        const finalAction = syncMetadata 
+          ? withSyncMetadata(mappedAction, syncMetadata)
+          : mappedAction;
+          
+        this.logAction(action, { success: true, mappedAction: finalAction });
+        return { success: true, mappedAction: finalAction };
       }
 
       return { success: false, error: 'No handler produced action' };

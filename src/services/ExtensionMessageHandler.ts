@@ -20,6 +20,9 @@ import { ActionMapper } from '../migration/ActionMapper';
 import { StateComparator } from '../migration/StateComparator';
 import { FeatureFlagManager } from '../migration/FeatureFlags';
 import { ToolTracker } from './ToolTracker';
+import { StateSynchronizer, SyncMetadata, SyncContext } from '../migration/StateSynchronizer';
+import { withSyncMetadata } from '../migration/syncMiddleware';
+import { MessageDebouncer } from '../migration/MessageDebouncer';
 
 /**
  * Simple performance monitoring utility for tracking operation durations
@@ -165,9 +168,11 @@ export class ExtensionMessageHandler {
   private stateManager?: StateManager;
   private actionMapper?: ActionMapper;
   private stateComparator?: StateComparator;
+  private stateSynchronizer?: StateSynchronizer;
   private featureFlagManager: FeatureFlagManager;
   private performanceMonitor: PerformanceMonitor;
   private toolTracker: ToolTracker;
+  private messageDebouncer?: MessageDebouncer;
 
   /**
    * Creates an instance of ExtensionMessageHandler
@@ -205,6 +210,12 @@ export class ExtensionMessageHandler {
     // Initialize tool tracker
     this.toolTracker = new ToolTracker(this.logger);
     
+    // Initialize message debouncer with a send handler
+    this.messageDebouncer = new MessageDebouncer(
+      (type: string, data: any) => this.postWithDispatchImmediate(type, data),
+      this.logger
+    );
+    
     // Initialize StateManager integration if feature flag is enabled
     if (this.featureFlagManager.isEnabled('useReduxStateManager')) {
       this.logger.info('ExtensionMessageHandler', 'Initializing StateManager integration');
@@ -213,6 +224,7 @@ export class ExtensionMessageHandler {
         // Get StateManager instance directly (it's a singleton)
         this.stateManager = StateManager.getInstance();
         this.actionMapper = new ActionMapper(context);
+        this.stateSynchronizer = new StateSynchronizer(this.logger);
         
         // Note: StateComparator would need access to SimpleStateManager
         // For now, we'll focus on read-only integration without comparison
@@ -239,16 +251,52 @@ export class ExtensionMessageHandler {
   }
   
   /**
+   * Handles webview to Redux synchronization
+   * Maps webview actions to Redux and dispatches with sync context
+   * @param type - Message type from webview
+   * @param data - Message data
+   * @param syncContext - Sync context from StateSynchronizer
+   */
+  private syncWebviewToRedux(type: string, data: any, syncContext: SyncContext): void {
+    if (this.actionMapper && this.stateManager) {
+      try {
+        const result = this.actionMapper.mapAction(
+          { type, payload: data },
+          { 
+            source: 'webview',
+            operationId: syncContext.operationId,
+            skipSync: false // We want Redux to potentially sync back
+          }
+        );
+        
+        if (result.success && result.mappedAction) {
+          this.logger.debug('ExtensionMessageHandler', `Syncing webview action to Redux: ${type}`);
+          this.stateManager.dispatch(result.mappedAction);
+        }
+      } catch (error) {
+        this.logger.error('ExtensionMessageHandler', `Failed to sync webview action: ${type}`, error as Error);
+      }
+    }
+  }
+
+  /**
    * Dispatches an action to StateManager in parallel with webview posts
    * This is used for read-only parallel state updates during migration
    * @param type - Message type
    * @param data - Message data
+   * @param syncMetadata - Optional sync metadata to prevent loops
    */
-  private dispatchToStateManager(type: string, data: any): void {
+  private dispatchToStateManager(type: string, data: any, syncMetadata?: Partial<SyncMetadata>): void {
     // Only dispatch if StateManager is enabled
     if (this.stateManager && this.actionMapper && this.featureFlagManager.isEnabled('useReduxStateManager')) {
       try {
-        const result = this.actionMapper.mapAction({ type, payload: data });
+        // Create sync metadata if not provided
+        const metadata = syncMetadata || {
+          source: 'redux' as const,
+          operationId: `op_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        };
+        
+        const result = this.actionMapper.mapAction({ type, payload: data }, metadata);
         if (result.success && result.mappedAction) {
           this.logger.debug('ExtensionMessageHandler', `Dispatching Redux action for ${type}`, result.mappedAction);
           this.stateManager.dispatch(result.mappedAction);
@@ -262,19 +310,86 @@ export class ExtensionMessageHandler {
   }
   
   /**
+   * Determines if a message type should always be sent immediately
+   * @param type - Message type to check
+   * @returns Whether the message should bypass debouncing
+   */
+  private shouldSendImmediate(type: string): boolean {
+    const immediateTypes = [
+      'error/show',
+      'status/processing',
+      'chat/messageComplete',
+      'permission/request',
+      'message/add', // User messages should be immediate
+      'ui/showPermissionRequest',
+      'planMode/toggle',
+    ];
+    
+    return immediateTypes.includes(type);
+  }
+  
+  /**
    * Posts a message to webview and dispatches to StateManager in parallel
    * This ensures dual state updates during migration
    * @param type - Message type
    * @param data - Message data
+   * @param immediate - Whether to bypass debouncing (default: auto-detected)
    */
-  private postWithDispatch(type: string, data: any): void {
-    // Always post to webview first (existing behavior)
-    if (this.webviewProtocol) {
-      this.webviewProtocol.post(type, data);
+  private async postWithDispatch(type: string, data: any, immediate?: boolean): Promise<void> {
+    // Auto-detect immediate messages if not explicitly set
+    const shouldBeImmediate = immediate ?? this.shouldSendImmediate(type);
+    
+    // Check if this message type should be debounced
+    if (!shouldBeImmediate && this.messageDebouncer && this.messageDebouncer.shouldDebounce(type)) {
+      // Queue for debounced sending
+      await this.messageDebouncer.queueMessage(type, data);
+      return;
     }
     
-    // Then dispatch to StateManager in parallel
-    this.dispatchToStateManager(type, data);
+    // Send immediately
+    this.postWithDispatchImmediate(type, data);
+  }
+  
+  /**
+   * Internal method that performs immediate posting without debouncing
+   * @param type - Message type
+   * @param data - Message data
+   */
+  private postWithDispatchImmediate(type: string, data: any): void {
+    // Use StateSynchronizer to prevent loops
+    if (this.stateSynchronizer && this.featureFlagManager.isEnabled('useReduxStateManager')) {
+      const syncContext = this.stateSynchronizer.beginSyncToWebview(type, {
+        source: 'redux',
+      }, data);
+      
+      if (!syncContext) {
+        // Sync was blocked - likely a loop detected
+        this.logger.debug('ExtensionMessageHandler', `Sync blocked for ${type} - loop prevention`);
+        return;
+      }
+      
+      try {
+        // Post to webview
+        if (this.webviewProtocol) {
+          this.webviewProtocol.post(type, data);
+        }
+        
+        // Then dispatch to StateManager with sync context
+        this.dispatchToStateManager(type, data, {
+          source: 'redux',
+          operationId: syncContext.operationId,
+        });
+      } finally {
+        // Complete the sync operation
+        this.stateSynchronizer.completeSyncToWebview(syncContext);
+      }
+    } else {
+      // No synchronizer - use original behavior
+      if (this.webviewProtocol) {
+        this.webviewProtocol.post(type, data);
+      }
+      this.dispatchToStateManager(type, data);
+    }
   }
   
   /**
@@ -455,13 +570,30 @@ export class ExtensionMessageHandler {
     data: FromWebviewProtocol[T][0]
   ): Promise<FromWebviewProtocol[T][1]> {
     this.logger.info('ExtensionMessageHandler', `Handling message: ${type}`);
+    
+    // Use StateSynchronizer for messages from webview
+    let syncContext: SyncContext | null = null;
+    if (this.stateSynchronizer && this.featureFlagManager.isEnabled('useReduxStateManager')) {
+      syncContext = this.stateSynchronizer.beginSyncFromWebview(type, {
+        source: 'webview',
+      }, data);
+      
+      if (!syncContext) {
+        // Sync was blocked - likely a loop detected
+        this.logger.warn('ExtensionMessageHandler', `Sync blocked for ${type} from webview - loop prevention`);
+        return {} as any; // Return empty response when blocked
+      }
+    }
 
-    // Handle messages
-    switch (type) {
+    try {
+      // Handle messages
+      let result: any;
+      switch (type) {
       case 'chat/sendMessage':
         this.logger.info('ExtensionMessageHandler', 'Sending message to Claude', data);
         await this.handleChatMessage(data as FromWebviewProtocol['chat/sendMessage'][0]);
-        return;
+        result = undefined;
+        break;
 
       case 'chat/newSession':
         this.logger.info('ExtensionMessageHandler', 'New session requested');
@@ -469,15 +601,17 @@ export class ExtensionMessageHandler {
         this.outputChannel.appendLine(
           `[DEBUG] Session cleared - next message will start new session`
         );
-        return;
+        result = undefined;
+        break;
 
       case 'settings/get':
         // Return current settings
-        return {
+        result = {
           selectedModel: this.getSelectedModel() || 'default',
           autoSave: this.context.workspaceState.get('autoSave', true),
           gitBackup: this.context.workspaceState.get('gitBackup', false),
         };
+        break;
 
       case 'settings/update':
         // Update settings
@@ -485,34 +619,39 @@ export class ExtensionMessageHandler {
         if (settings.selectedModel) {
           await this.context.workspaceState.update('selectedModel', settings.selectedModel);
         }
-        return {};
+        result = {};
+        break;
 
       case 'settings/selectModel':
         // Update selected model
         const { model } = data as FromWebviewProtocol['settings/selectModel'][0];
         await this.context.workspaceState.update('selectedModel', model);
         this.logger.info('ExtensionMessageHandler', 'Model selected', { model });
-        return {};
+        result = {};
+        break;
 
       case 'conversation/getList':
         // Return empty conversation list for now
         this.logger.info('ExtensionMessageHandler', 'Getting conversation list');
-        return {
+        result = {
           conversations: [],
         };
+        break;
 
       case 'mcp/getServers':
         // Get MCP servers and send them to the UI
         this.logger.info('ExtensionMessageHandler', 'Getting MCP servers');
         await this.loadAndSendMcpServers();
-        return;
+        result = undefined;
+        break;
 
       case 'permission/response':
         // Handle permission response
         const permissionData = data as FromWebviewProtocol['permission/response'][0];
         this.logger.info('ExtensionMessageHandler', 'Permission response', permissionData);
         this.handlePermissionResponse(permissionData);
-        return;
+        result = undefined;
+        break;
 
       case 'plan/approve':
         this.logger.info('ExtensionMessageHandler', 'Plan approved', data);
@@ -532,7 +671,8 @@ export class ExtensionMessageHandler {
 
         // Update UI
         this.postWithDispatch('planMode/toggle', false);
-        return;
+        result = undefined;
+        break;
 
       case 'plan/refine':
         this.logger.info('ExtensionMessageHandler', 'Plan refinement requested', data);
@@ -540,7 +680,8 @@ export class ExtensionMessageHandler {
 
         // User will provide refinement instructions
         // Just focus the input
-        return;
+        result = undefined;
+        break;
 
       case 'chat/stopRequest':
         // Handle stop request using AbortController
@@ -570,11 +711,25 @@ export class ExtensionMessageHandler {
         } else {
           this.outputChannel.appendLine(`[Stop] No active Claude process to stop`);
         }
-        return;
+        result = undefined;
+        break;
 
       default:
         this.logger.warn('ExtensionMessageHandler', `Unhandled message type: ${type}`);
-        return;
+        result = undefined;
+    }
+    
+      // Dispatch to Redux if we have a sync context
+      if (syncContext) {
+        this.syncWebviewToRedux(type, data, syncContext);
+      }
+      
+      return result;
+    } finally {
+      // Complete sync operation if started
+      if (syncContext && this.stateSynchronizer) {
+        this.stateSynchronizer.completeSyncFromWebview(syncContext);
+      }
     }
   }
 
@@ -1274,6 +1429,11 @@ export class ExtensionMessageHandler {
           this.outputChannel.appendLine(`[Process Exit] Cleared all pending tools`);
         }
 
+        // Flush any pending debounced messages before completion
+        if (this.messageDebouncer) {
+          this.messageDebouncer.flushAll();
+        }
+
         // Always send completion message and set processing to false
         this.postWithDispatch('chat/messageComplete', {});
 
@@ -1628,6 +1788,7 @@ export class ExtensionMessageHandler {
                   this.outputChannel.appendLine(
                     `[DEBUG] Sending incremental thinking update to UI with messageId: ${this.thinkingMessageId}`
                   );
+                  // Use debounced sending for thinking updates during streaming
                   this.postWithDispatch('message/thinking', {
                     content: newThinkingContent, // Send only new content
                     currentLine: this.latestThinkingLine,
@@ -1895,6 +2056,11 @@ export class ExtensionMessageHandler {
           this.outputChannel.appendLine(
             `[DEBUG] Thinking completed. Duration: ${thinkingDuration}s`
           );
+
+          // Flush any pending thinking updates before sending final
+          if (this.messageDebouncer) {
+            this.messageDebouncer.flushTypes(['message/thinking']);
+          }
 
           // Send final thinking update with duration and accumulated content
           this.postWithDispatch('message/thinking', {

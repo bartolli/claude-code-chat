@@ -9,6 +9,8 @@ import uiReducer from './slices/uiSlice';
 import processesReducer from './slices/processesSlice';
 import claudeReducer from './slices/claudeSlice';
 import mcpReducer from './slices/mcpSlice';
+import { createSyncMiddleware } from '../migration/syncMiddleware';
+import { Logger } from '../core/Logger';
 
 const rootReducer = combineReducers({
   session: sessionReducer,
@@ -19,6 +21,9 @@ const rootReducer = combineReducers({
   mcp: mcpReducer
 });
 
+// Get logger instance for middleware
+const logger = Logger.getInstance();
+
 // Create the Redux store following GUI pattern
 export const store = configureStore({
   reducer: rootReducer,
@@ -28,10 +33,10 @@ export const store = configureStore({
         // Ignore these action types
         ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
         // Ignore these field paths in all actions
-        ignoredActionPaths: ['meta.arg', 'payload.timestamp'],
+        ignoredActionPaths: ['meta.arg', 'payload.timestamp', 'meta.sync'],
         // Ignore these paths in the state
       }
-    }),
+    }).concat(createSyncMiddleware(logger)),
   devTools: false // Disable for VS Code extension
 });
 
